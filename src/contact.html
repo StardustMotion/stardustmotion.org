@@ -1,0 +1,44 @@
+<div class="starmo-menu">  
+  <span id="intro" class="show">
+    <p data-lang="howToContact">To send a message directly</p>
+    <div id="sns">
+      <a href="https://discordlookup.com/user/970654047105335306">
+          <span class="starmo-tooltip">Discord</span>
+          <img class="icon DISCORD" />
+      </a>
+      <a href="https://line.me/ti/p/jFykW0JL0D">
+          <span class="starmo-tooltip">LINE</span>
+          <img class="icon LINE" />
+      </a>
+    </div>
+  </span>
+  <button data-lang="fromSite" class="option formButton">
+    From the site
+  </button>
+  <br>
+  <form target="_blank"
+        action="https://usebasin.com/f/2845f6006cff" 
+        enctype="multipart/form-data" 
+        method="POST">
+    <label data-lang="email" for="contactEmail">Email</label>
+    <input required type="email" id="contactEmail" name="email"><br><br>
+
+    <label data-lang="message" for="contactMessage">Message</label><br><br>
+    <textarea required maxlength="3000" id="contactMessage" name="message"></textarea><br>
+    <br>
+    <div id="contactFile">
+      <label data-lang="uploadFile" for="contactFile">Send a file (max. 10 Mb)</label>
+      <input style="visibility:hidden; width:2px" name="file" type="file" />
+      <button class="starmo-button mini">
+        <img class="icon DOWNLOAD">
+        <span></span>
+      </button>
+    </div>
+    <br>
+    
+    <!-- 3x00000000000000000000FF | 1x00000000000000000000AA for testing -->
+    <div id="contactTurnstile" data-sitekey="0x4AAAAAAANMup4kWOBfd-zO"></div>
+    <br>
+    <button class="starmo-button" data-lang="submit">Submit</button>
+  </form>
+</div>

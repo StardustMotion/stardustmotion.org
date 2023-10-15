@@ -1,0 +1,2674 @@
+/* This ACS gathers the code for stuff like Xover keybind events
+// or crafting table manipulation
+
+
+          TABLE OF CONTENTS
+
+	#0. Imports, constants etc
+	#1. General Scripts	
+		#1.1. Map events
+		#1.2. Available Weapons
+		#1.3. LMS Setup
+		#1.4. Bot Control
+	#2. Xover Keybinds & settings
+	#3. Crafting Table
+		#3.1. Data Structures
+			#3.1.1. Crafting Table
+			#3.1.2. Fusion Prediction
+			#3.1.3. Fusion History
+		#3.2. Events
+	#4. ND Weapon Structure
+		#4.1. Ammo Computation
+		#4.2. Ammo Check & Consume
+		#4.3. Ammo Refill
+		#4.4. Energy Balancer Refill
+	#5. Screws
+	#6. Miscellaneous
+	#7. Clientsided / Non-gameplay stuff
+*/
+
+
+
+
+
+	////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//                    #0. Imports, constants etc         			  //
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+
+#library "xover"
+#include "zcommon.acs"
+#include "8bdmlib.acs"
+#import "kitchen.acs"
+
+#DEFINE LMS_BASE_WEAPONS 0 // 5
+#DEFINE LMS_EXTRA_WEAPONS 5 // how much extra weapons to the initial 5 in (T)LMS
+
+// contains the indexes of LMS weapons
+global int 53: lmsIndex[]; // size = LMS_BASE_WEAPONS+LMS_EXTRA_WEAPONS 
+
+#DEFINE TABLECAPACITY 5
+#DEFINE TABLECAPACITYdown1 TABLECAPACITY-1
+#DEFINE TABLECAPACITYdown1SQR TABLECAPACITYdown1*TABLECAPACITYdown1
+
+#DEFINE FUSIONLIMIT 20 // /!\ Must be < MAX_1D /!\
+#DEFINE FUSIONLIMITplus1 FUSIONLIMIT+1
+#DEFINE MAX_1Dplus1 1+MAX_1D
+
+#LIBDEFINE ServerMAXxw 32 // The same as ServerMAX from 8bdm.lib, but it can be 
+		// used in array's size definition since it's a preprocessor directive
+#DEFINE FUSION_HISTORY_SIZE (FUSIONLIMIT*3)+2
+
+// Some clientsided animation IDs
+#DEFINE CS_WEAPON_MESSAGE 0
+#DEFINE CS_C_TABLE_SMOKE 1
+#DEFINE CS_ELECTRICITY 2
+#DEFINE CS_C_TABLE_SEGFAULT 3
+#DEFINE CS_WEP_INSERTED 4
+#DEFINE CS_NOT_INGREDIENT 5
+#DEFINE CS_RECIPE_OWNED 6
+#DEFINE CS_TABLE_ALARM 7
+#DEFINE CS_FUSION_TIP 8
+#DEFINE CS_FUSION_LIMIT 9
+#DEFINE CS_FUSION_PREVIEW 10
+#DEFINE CS_NOT_ENOUGH_SCREWS 11
+#DEFINE CS_FUSION_COST 12
+#DEFINE CS_PRINT_TABLE_MESSAGE 13
+#DEFINE CS_XOVER_HELP 14
+#DEFINE XOVER_HELP_SCREENS 4
+#DEFINE CS_WEAPON_INFORMATION 15
+#DEFINE CS_WEAPON_INFORMATION_WINDOW 16
+
+#DEFINE HUD_CT_CELL_W 422 // 384*240
+#DEFINE HUD_CT_CELL_H 264
+#DEFINE HUD_CT_WEP_W 342
+#DEFINE HUD_CT_WEP_H 226
+#DEFINE HUD_CT_MAIN_W 648
+#DEFINE HUD_CT_MAIN_H 380
+#DEFINE HUD_HELP_WEP_W 432
+#DEFINE HUD_HELP_WEP_H 270
+
+
+
+
+
+	////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//                    #1. General Scripts								//
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+
+// remembers the index of the weapons the players pick up.
+// Used i.e to generate weapon pickups on death, or by bots to pick ingredients
+// The first index informs about the last unused index of the table
+// [lastUnusedIndex, ...weaponIds]
+global int 54: wepInventory[]; // [ServerMAXxw][MAX_1Dplus1];
+
+// keep track of weapons already combined by bots
+// first index = last unused index
+int botIngredients[ServerMAXxw][1+TABLECAPACITYdown1];
+
+// matrix containing fusion prices / [row][column], calculated on map start (t2later global)
+// row = tier / column = chain combo
+int fusionCost[TABLECAPACITYdown1][TABLECAPACITYdown1];
+
+
+function int getWepInventory(int player, int index) {
+	return wepInventory[(player*MAX_1Dplus1) + index]; }
+
+function void setWepInventory(int player, int index, int value) {
+	wepInventory[(player*MAX_1Dplus1) + index] = value; }
+	
+function void incrWepInventory(int player) {
+	wepInventory[(player*MAX_1Dplus1)]++; }
+	
+
+function void clearWepInventory(int player) {
+	for (int i = 1; i < MAX_1Dplus1; i++) { 
+		setWepInventory(player,i,-1); }
+		setWepInventory(player,0,1); }
+		
+// remove all the weapon flags currently registered
+function void purgeWepInventoryFlags(int player) {
+	for (int i = 1; i < getWepInventory(player,0); i++) {
+		TakeInventory(getWepData(getWepInventory(player,i), WEPDATA_FLAG),1); }}
+
+function void printWepInventory(int player) {
+	int count = getWepInventory(player, 0);
+	log(s:"Weapons : ", d:count-1, s:" (last index : ", d:count, s:")");
+	for (int i = 1; i < MAX_1Dplus1; i+=8) { 
+		Log(d:i-1, s:"~",d:i+6,s:". ",
+			s:getWepData(getWepInventory(player,i), WEPDATA_RADICAL), s:" ",
+			s:getWepData(getWepInventory(player,i+1), WEPDATA_RADICAL), s:" ",
+			s:getWepData(getWepInventory(player,i+2), WEPDATA_RADICAL), s:" ",
+			s:getWepData(getWepInventory(player,i+3), WEPDATA_RADICAL), s:" ",
+			s:getWepData(getWepInventory(player,i+4), WEPDATA_RADICAL), s:" ",
+			s:getWepData(getWepInventory(player,i+5), WEPDATA_RADICAL), s:" ",
+			s:getWepData(getWepInventory(player,i+6), WEPDATA_RADICAL), s:" ",
+			s:getWepData(getWepInventory(player,i+7), WEPDATA_RADICAL), s:" "
+		); 
+}}
+	
+function bool botCombinedWeapon(int player, int weapon) {
+	int tmp;
+	for (int i = 1; i < TABLECAPACITY; i++) {
+		tmp = botIngredients[player][i];
+		if (tmp == -1) { return false; }
+		else if (tmp == weapon) { return true; }
+	}
+	return false;
+}
+
+function void clearBotIngredients(int player) {
+	botIngredients[player][0] = 1;
+	for (int i = 1; i < TABLECAPACITY; i++) { botIngredients[player][i] = -1; }}
+	
+function void printBotIngredients(int player) {
+	Log(s:"Bot Last Index = ", d:botIngredients[player][0]);
+	for (int i = 1; i < TABLECAPACITY; i++) {
+		Log(s:"Wep ", d:i+1, s:" ", 
+			s:getWepData(botIngredients[player][i], WEPDATA_RADICAL), s:" "); }}
+	
+function void calcFusionCost(void) {
+	int base = 100; int chain = 100; int multiplier = 1; 
+	int factor = GetCVar("XW_SCREW_COST_MULTIPLIER");
+	switch(factor) {
+		case 0: case 1: case 3: case 4: case 8: 
+			multiplier += (factor-1);
+			break;
+		case 2: default:
+			multiplier += 1;
+			break; 
+	}
+	for (int i = 0; i < TABLECAPACITYdown1; i++) {
+		base += (i*50); 
+		for (int j = 0; j < TABLECAPACITYdown1-i; j++) {
+			fusionCost[i][j] = multiplier*(base+(chain*j)); }
+		chain += 25;}}
+
+/* triple coded value 
+	/ (TABLECAPACITYdown1)² ==> current fusion chain progress
+	/ TABLECAPACITYdown1  ==>  first weapon of the fusion chain's tier level
+	% TABLECAPACITYdown1 ==> fusion chain combo expected
+// modulo ==> current combo count			*/
+int playerFusionCost[ServerMAXxw];
+
+function int combineStatusToPrice(int combineStatus, bool difference) {
+	if (combineStatus == -1) { return 0; }
+	int curCombo = combineStatus / TABLECAPACITYdown1SQR;
+	combineStatus %= TABLECAPACITYdown1SQR;
+	int expectedCombo = combineStatus % TABLECAPACITYdown1;
+	int initialTier = combineStatus / TABLECAPACITYdown1;
+	int res = fusionCost[initialTier][expectedCombo];
+	if (difference) {
+		int diffVal;
+		if (!curCombo) { diffVal = fusionCost[initialTier][curCombo]; }
+		else { diffVal = fusionCost[initialTier][curCombo] - fusionCost[initialTier][curCombo-1]; }
+		 return diffVal;	}
+	if (curCombo) {  res -= fusionCost[initialTier][curCombo-1]; }
+	return res;
+}
+
+// [0,TABLECAPACITY-2]²
+function int setCombineStatus(int tier, int combo) {
+	return (tier*TABLECAPACITYdown1) + combo;
+}
+
+function bool isFusion(int wep) { return (wep >= MAX_1D); }
+
+// turns a weapon actor name (i.e from GetWeapon()) into an index usable by getWepData
+function int wep2index(str wepName) {
+	int len = StrLen(wepName);
+	// removing the "XW" and "Wep" prefixes
+	str radical = StrRight(StrLeft(wepName, len-3), len-5);
+	for (int i = 0; i < TOTAL_WEPS; i++) {
+		if (radical == wepRadical[i]) { return i; }}
+	return -1;
+}
+
+// being a script allows DECORATE to call it
+script "isScrewsFree" (void) {
+	SetResultValue(isScrewsFree()); }
+	
+function bool isScrewsFree(void) {
+	return (isLMSgameMode() || !GetCVar("XW_SCREW_COST_MULTIPLIER")); }
+
+// computed properties
+function bool isLMSgameMode(void) { 
+	return (GetCvar("lastmanstanding") + GetCvar("teamlms"))>0; }
+	
+// (T)LMS/survival/invasion
+function bool isLimitedLives(void) {
+	return (GetCVar("survival")+GetCVar("invasion")+isLMSgameMode())>0; }
+	
+function bool isTeamGameRound(void) {
+	return GetCvar("teamplay") == 1 || GetCvar("TeamPossession") == 1 ||
+		GetCvar("teamlms") == 1 || GetCvar("ctf") == 1 || GetCvar("oneflagctf") == 1
+		|| GetCVar("cooperative"); }
+
+// (only the inventory actors which I felt like were worth removing)
+#DEFINE INVENTORY_STATE_ITEMS_SIZE 53
+int inventoryStateItems[INVENTORY_STATE_ITEMS_SIZE] = {
+	
+	// Vanilla general
+	"CriticalDeath", "CriticalFlag", "IsUnderWater",
+	"HasFeetInWater", "IsFlying", "IsDead",  "PlayerPropertyFrozen",
+	"PlayerPropertyStopped", "PlayerPropertyFlight", "PlayerPropertyCantseek",
+	"NoJumpCancel", "BasicArmor",
+	
+	// Vanilla utility
+	"BeatBoostIsActive", "RushJetCounter", "RushMarineCounter", "RushSearchActive", 
+	"BeatSupportActivated",
+	
+	// Vanilla weaponry	
+	"WeaponCharge", "ShieldCheck", "NoPushFlag", "ShieldHits", "StopShield",
+	"CutterFlag", "WaterShieldCheck", "WaterShieldShoot",
+	"BrightBlind", "SkullShieldCheck", "NoiseCrushCaught", "CopyVisionFlag", 
+	"SakugarneActive", 
+	
+	// Xover weapons engine/general flags
+	"FlagA", "FlagB", "VarA", "VarB", "isCombining", "isUncombining",
+	"criticalSystemFusion", "noNextFusionInc", "stopUncombine", 
+	"stopWeaponBlink", "altfireToken", "XWOpenTable", "noGravityStack",
+	"TotalLockCount", "AntiPitStack", "Is not solid", 
+	"Recipe Mix Item", // not allowed to take them outside their map ' ^^
+	
+	// Xover weaponry
+	"GroundDashStack", "Super Arrow Frozen", "XW Time Bomb Stack",
+	"YogaInfernoStanceLimit", "BoomerangCutterStack", "ThousandKnivesCooldown",
+	
+};
+
+// removes inventory actors which have a "flag"/"state" purpose. Used for Coop
+// game modes where the player inventory is not always cleared on death/changemap
+// Also purges SetPlayerProperties side effects (Coop changemap only)
+function void purgePlayerState(bool isRespawn) {
+	if (!GetCVar("cooperative") || 
+		GetCVar("sv_coop_loseinventory")) { return; }
+	for (int i = 0; i < INVENTORY_STATE_ITEMS_SIZE; i++) {
+		TakeInventory(inventoryStateItems[i], 
+			CheckInventory(inventoryStateItems[i])); }
+	if (!isRespawn && CheckInventory("Xover Cooperative")) {
+		SetPlayerProperty(0, 0, PROP_FROZEN);
+		SetPlayerProperty(0, 0, PROP_FLY);
+		SetPlayerProperty(0, 0, PROP_TOTALLYFROZEN);
+		SetPlayerProperty(0, 0, PROP_BUDDHA);
+		//GiveInventory("WaterGravityOff",1); // done in UNLOADING script for technical reasons
+		GiveInventory("PlayerPropertyCantseekOff", 1);
+		
+		// fine for Vanilla, not so much for class-based mods 		
+		// might want to store these properties similar to gravity is stored 
+		//(on map start, restored on map end) if that's really an issue
+		SetActorProperty(0, APROP_JumpZ, 10.0);
+		SetActorProperty(0, APROP_ViewHeight, 41.0);
+		SetActorProperty(0, APROP_ScaleX, 2.5);
+		SetActorProperty(0, APROP_ScaleY, 2.5);
+		GiveInventory("Opacity 1",1); // back to full opacity (centaur flash)
+		// Doppler Attack weird flags
+		if (!CheckFlag(0,"SOLID")) { GiveInventory("Re solidify", 1); }
+		if (CheckFlag(0,"FORCEXYBILLBOARD")) { GiveInventory("flagForceXYbillboardOff", 1); }
+		if (!CheckFlag(0,"PICKUP")) { GiveInventory("flagPickupOn", 1); }
+		if (CheckFlag(0,"NOINTERACTION")) { GiveInventory("noInteractionOff", 1); }
+		if (CheckFlag(0, "FLOORHUGGER")) { GiveInventory("flagFloorhuggerOff", 1); }
+		// resets INVULNERABLE, REFLECTIVE and SHIELDREFLECT flags
+		GiveInventory("Super Arrow SS Off", 1);
+		GiveInventory("AntiPitFinished",1);
+	}
+}
+
+	//////////////////////////////////////////////////////////
+//                   #1.1. Map events				           //
+	//////////////////////////////////////////////////////////
+
+
+
+// Map start event
+script "Xover Open" OPEN
+{
+	if (!isScrewsFree()) { calcFusionCost(); }
+	delay(1); // allow custom TID assignment from asynchrons script
+	
+	// LMS handling
+	if (isLMSgameMode()) { LMS_Setup();  }
+	updateMapWeapons();
+}
+
+// Player enters the game/respawn event
+script "Xover Enter" ENTER { 
+	purgePlayerState(false);
+	delay(1); 
+	int player = PlayerNumber();
+	spawnSetUp(player, FALSE); 
+	delay(1);
+	ammoBarUpdate(player);
+}
+
+script "Xover Respawn" RESPAWN
+{
+	purgePlayerState(true);
+	delay(1);
+	int player = PlayerNumber();
+	spawnSetUp(player, TRUE);
+	if (isLMSgameMode()) { 
+		giveLMSweapons(1000+player, TRUE); }
+	delay(1);
+	ammoBarUpdate(player);
+}
+
+script "Xover Unloading" UNLOADING {
+	if (GetCVar("cooperative")) {
+		GiveInventory("WaterGravityOff",1);
+		if (GetCVar("XW_COOP_MAP_LOSE_WEAPONS")) {
+			for (int i = 0; i < ServerMAXxw; i++) {
+				if (PlayerInGame(i)) {
+					purgeXWweaponry(i); }}}}}
+
+// remove all weapons (vanilla and xover weapons)
+function void purgeXWweaponry(int player) {
+	int vanillaCount = getWepInventory(player, 0);
+	int tid = player+1000;
+	for (int i = 1; i < vanillaCount; i++) {
+		TakeActorInventory(tid, getWepData(getWepInventory(player, i), WEPDATA_WEP), 1); 
+	}
+	purgeWepInventoryFlags(player);
+	int fusion;
+	for (i = 0; i < FUSIONLIMIT; i++) {
+		fusion = getFusionHistory(player, i, 0);
+		if (fusion >= MAX_1D) { 
+			TakeActorInventory(tid, getWepData(fusion, WEPDATA_WEP), 1); }
+	}
+}
+
+function void spawnSetUp(int player, bool isRespawn) {
+	GiveInventory("flagNoGravityOff", 1);
+		
+	if (PlayerIsBot(player)) { 
+		clearBotIngredients(player);
+		if (CheckInventory("Xover Cooperative") && !isRespawn) { // a map was just loaded (Coop)
+			clearFusionHistory(player);
+		}
+		//stops WEPACS.acs / script 252 from interefering
+		// with the Xover Bot Control below script
+		GiveInventory("NoBotWeaponSwitch",1); 
+		ACS_NamedExecuteAlways("Xover Bot Control", 0, player);	
+	}
+	startingScrews(player);	
+	clearCraftingTable(player);
+	showTable(player);	
+	ctOperate(-1, player, TRUE);	
+	playerFusionCost[player] = -1;
+	clearKeybindRefresh(player);	
+	
+	// remove all planned fusions from the fusion counter
+	clearPlannedFusionCount(player);
+	
+	// booleans are just yesses and noes, they can't hurt you
+	// also booleans :
+	bool isPVPOrPlayerJoin = !CheckInventory("Xover Cooperative");
+		//  || !(cooperative && sv_coop_loseinventory)
+	bool isPVMRespawnAndNoKeepWeapons = CheckInventory("PvM Death") && 
+			(GetCVar("sv_coop_loseweapons") || GetCVar("sv_coop_loseinventory"));
+	bool isPVMChangemapAndNoKeepWeapons = CheckInventory("Xover Cooperative") 
+				&& !isRespawn && GetCVar("XW_COOP_MAP_LOSE_WEAPONS");
+				
+	if (!isPVPOrPlayerJoin) {
+		// if remove weapons on respawn but keep inventory
+		if (CheckInventory("PvM Death") &&
+			!isPVMChangemapAndNoKeepWeapons && // already purged in UNLOADING
+			GetCVar("sv_coop_loseweapons") && !GetCVar("sv_coop_loseinventory")) {
+			purgeWepInventoryFlags(player); 
+		}	
+		// [PvM] remove consumed weapons during fusionHistory operation
+		// in death/changemap events (where weps can be set to be kept)
+		int writeEvent = getFusionEventWrite(player);
+		if (writeEvent) {
+			if (writeEvent < MAX_1D) { 
+				TakeInventory(getWepData(
+					getFusionHistory(player, writeEvent-1, 1), WEPDATA_WEP), 1);
+				TakeInventory(getWepData(
+					getFusionHistory(player, writeEvent-1, 2), WEPDATA_WEP), 1); }
+			else { 
+				TakeInventory(getWepData(writeEvent, WEPDATA_WEP), 1); }
+		}
+		//}
+	}
+						
+	
+	if (isPVPOrPlayerJoin || 
+		isPVMRespawnAndNoKeepWeapons ||
+		isPVMChangemapAndNoKeepWeapons) {	
+		
+		clearWepInventory(player);		
+		
+		if (GetCVar("XW_RESTORE_INGREDIENTS") && 
+			(isRespawn || 
+				(CheckInventory("PvM Death") && !isPVMChangemapAndNoKeepWeapons)) &&
+			!isLMSgameMode()) {
+			restoreXoverIngredients(player); }
+		else { clearFusionHistory(player); }	
+	}
+	
+	setFusionEventWrite(player,0);	
+	if (GetCVar("cooperative")) { 
+		GiveInventory("Xover Cooperative",1);
+		TakeInventory("PvM Death", 1); }
+}
+	
+function void ammoBarUpdate(int player) {
+	if (isFusion(wep2index(GetWeapon()))) {
+		ACS_NamedExecuteWithResult("Ammo Update"); }
+	else {
+		ACS_NamedExecuteAlways("Ammo Hide", 0, player); }
+}
+	
+
+// Player death event : drop screws and uncombine XWeps to previous tier
+script "Xover Death" DEATH
+{
+	int player = PlayerNumber();
+	
+	// map maker's responsability to have enough of the right spawn spots
+	// sv_unblockallies true is a temporary substitute
+	//if (!Timer()) { mapStartTelefrag[player] = true; terminate; }
+	
+	if (!isScrewsFree()) { 
+		SpawnForced("Xover Screws Surprise", 
+			GetActorX(0), GetActorY(0), GetActorZ(0)); 
+	}
+	
+	if(GetCVar("XW_RESTORE_INGREDIENTS") &&
+		!(GetCVar("cooperative") && 
+			!(GetCVar("sv_coop_loseweapons") || GetCVar("sv_coop_loseinventory")))) { 
+		xoverDowngrade(player);
+	}
+	if (GetCVar("cooperative")) { GiveInventory("PvM Death", 1); }
+	if (isLimitedLives()) {
+		if (!GetPlayerLivesLeft(player)) { 
+			xoverToSpecClear(player, true); }}
+}
+
+
+script "Xover Death Weapon" (void) {
+	if (!isLMSgameMode()) {
+		int player = PlayerNumber();
+		int latestWepIndex = getWepInventory(player,0);
+			if (latestWepIndex != 1) {
+					weaponForKiller(player+1000, 
+					GetActorProperty(0, APROP_TargetTID), latestWepIndex); }}
+}
+			
+function void weaponForKiller(int victimTID, int killerTID, int latestWepIndex) {
+	int wep; int weaponsCount = latestWepIndex-1; int victimID = victimTID-1000;
+	// random weapon if hazard death or suicide
+	if (killerTID == 0 || (victimTID == killerTID)) { 
+		wep = getWepInventory(victimID,random(1,weaponsCount));	
+	}
+	// random weapon the killer didn't own on player kill
+	else {
+		wep = random(0,weaponsCount-1);
+		int i = 0;
+		while (i < weaponsCount && CheckActorInventory(killerTID, 
+										getWepData(getWepInventory(victimID,1+wep), WEPDATA_FLAG))) {
+			
+			wep++; wep %= weaponsCount;
+			i++; 
+		}
+		wep = getWepInventory(victimID,1+wep);
+	}
+	int tempTID = 5736+victimTID; // 6736-1000
+	SpawnForced(getWepData(wep, WEPDATA_DROP), GetActorX(0), GetActorY(0), GetActorZ(0), tempTID);
+	//ThrustThing(random(0,255), random(9,15), 0, tempTID);
+	ThrustThingZ(tempTID, 65, 0, 0);
+	Thing_ChangeTID(tempTID, 0);
+}
+		
+
+// Player Spectate/DC event
+script "Xover Disconnect" (int player) DISCONNECT
+{
+	xoverToSpecClear(player, false);
+}
+
+
+function void xoverToSpecClear(int player, bool deadException) {
+	ACS_NamedExecuteAlways("Ammo Hide", 0, player, 0, deadException); // affects game state
+	showEmptyTable(player);	
+	ACS_NamedExecuteAlways("Crafting Table Operate", 0, -1, player, 1);
+}
+
+// clientsided variables
+bool weaponInfoTableAnimation = false;
+bool weaponInformationOn = false;
+bool isHelpOpen = false;
+script "Xover Disconnect Clientside" (int player) DISCONNECT CLIENTSIDE {
+	if (ConsolePlayerNumber() == player) {
+		if (weaponInfoTableAnimation || weaponInformationOn) { // weapon information HUD
+			weaponInfoTableAnimation = false;
+			closeWeaponInformation();
+		}
+		if (isHelpOpen) { closeHelpMenu(); }
+		showEmptyTable(player);	
+		ctOperate(-1, player, TRUE);
+	}
+}
+
+
+
+
+	
+		
+
+	//////////////////////////////////////////////////////////
+//                   #1.2. Available Weapons					//
+	//////////////////////////////////////////////////////////
+
+// Weapon index initially present on the map when it started
+int map_weapons[MAX_1D];
+// Mutated by players when they need to compute a random map recipe, taking
+// as base the above array
+int map_weaponsTmp[MAX_1D];
+int weaponCount;
+// contains the weapon data representing a fusion hint
+int tipsIngredients[TABLECAPACITY];
+int lastFusionTip[ServerMAXxw];
+
+function void printMapWeaponsTmp(void) {
+	log(s:"-------------");
+	for (int i = 0; i < MAX_1D; i+=4) {
+		log(s:getWepData(map_weaponsTmp[i], WEPDATA_RADICAL), s:" - ",
+			s:getWepData(map_weaponsTmp[i+1], WEPDATA_RADICAL), s:" - ",
+			s:getWepData(map_weaponsTmp[i+2], WEPDATA_RADICAL), s:" - ",
+			s:getWepData(map_weaponsTmp[i+3], WEPDATA_RADICAL)); }}
+
+
+// Register the weapons present on the map on start / or weapons given in current LMS round
+function void updateMapWeapons(void) {
+	int i = 0;
+	if (isLMSgameMode()) { 
+		for (i = 0; i < LMS_BASE_WEAPONS+LMS_EXTRA_WEAPONS; i++) { 
+			map_weapons[i] = lmsIndex[i]; }}
+	else {
+		for (int j = 0; j < MAX_1D; j++)	{
+			str wepGiver = getWepData(j, WEPDATA_GIVER);
+			if (ThingCountName(wepGiver, 0)>0) {
+				map_weapons[i] = j;
+				i++;}}}
+	weaponCount = i;
+	mapWeaponsToClient(i); }
+	
+script "Recipe Browsing" (void) {
+	if (weaponCount < 2) { terminate; } // at least 2 weapons are required to combine...
+	for (int i = 0; i < weaponCount; i++) { 
+		map_weaponsTmp[i] = map_weapons[i]; }	
+	recipeCombinations(-1);
+}
+
+// called recursively to append elements to the fusion chain
+function void recipeCombinations(int prevFusion) {
+	int upper = min(MAX_1D, weaponCount)-1;
+	int chain;
+	int pivotRNGSeed; 
+	int recipe;
+	if (prevFusion != -1) {
+		chain = getWepData(map_weaponsTmp[prevFusion], WEPDATA_TIER)-1;
+		upper -= chain;
+		pivotRNGSeed = prevFusion; }
+	else {
+		pivotRNGSeed = random(0,upper);
+		chain = 0; }		
+	int toMixRNGSeed = random(0,upper-1);	
+	int pivot; int pivotWep; int toMix; int toMixWep; 
+	
+	for (int pivotOffset = 0; pivotOffset < upper; pivotOffset++) {	
+		pivot = (pivotRNGSeed + pivotOffset)%(upper+1); 
+		// swap last index with pivot index. Operate in [0,n-1] range
+		pivotWep = map_weaponsTmp[pivot];		
+		map_weaponsTmp[pivot] = map_weaponsTmp[upper];
+		map_weaponsTmp[upper] = pivotWep;
+		
+		int toSkip = max((pivotRNGSeed+pivotOffset)-toMixRNGSeed-upper,0);
+		int toShift = toMixRNGSeed-pivotRNGSeed;
+		toShift = (pivotOffset-toShift)*(toShift > 0 && pivotOffset > toShift);
+		
+		for (int offset = toShift+toSkip; offset < upper; offset++) {
+			toMix = (toMixRNGSeed+offset);
+			if (toShift > 0) { toMix -= upper; }			
+			//log(d:toMix2, s: " >= ", d:pivotRNGSeed, s:" && < ", d:pivotRNGSeed+pivotOffset);
+			if (toMix >= pivotRNGSeed && 
+				toMix < pivotRNGSeed+pivotOffset) { continue; }
+				
+			toMix %= upper;
+			toMixWep = map_weaponsTmp[toMix];
+			recipe = search(pivotWep,toMixWep);
+			/*log(s:getWepData(pivotWep,WEPDATA_RADICAL), s:" + ", 
+				s:getWepData(toMixWep,WEPDATA_RADICAL));*/
+			if (recipe == -1) { continue; }
+			else {
+				if (!chain) { tipsIngredients[0] = pivotWep; }
+				tipsIngredients[chain+1] = toMixWep;				
+				map_weaponsTmp[toMix] = recipe;
+				if (random(0,1)) { 
+					recipeCombinations(toMix); }
+				else { 
+					displayFusionTip(recipe, chain+2); }
+				return;
+			}
+		}
+		if (chain) { displayFusionTip(pivotWep, chain+1); return; }
+		map_weaponsTmp[upper] = map_weaponsTmp[pivot];
+		map_weaponsTmp[pivot] = pivotWep;
+	}
+}
+
+			
+
+
+	//////////////////////////////////////////////////////////
+//                   #1.3. LMS Setup							//
+	//////////////////////////////////////////////////////////
+
+// select the LMS weapons for the X rounds on the current map
+function void LMS_Setup (void) {
+	// only select weapons if that started map is not a round in progress
+	if (GetGameModeState() != 2) {
+		int i; int maxWep = MAX_1D-1-1; // -1 extra to remove Dawn Breaker
+		
+		// Xover style weapon rotation (5 completely random weapons)
+		if (GetCVar("XW_LMS_XOVER_ROTATION")) {
+			for (int j = LMS_BASE_WEAPONS; j < LMS_BASE_WEAPONS+LMS_EXTRA_WEAPONS; j++) { lmsIndex[j] = -1; }
+			int k = LMS_EXTRA_WEAPONS;
+			while (k > 0) {
+				i = Random(0, maxWep);
+				for (int check = 0; check < LMS_BASE_WEAPONS+LMS_EXTRA_WEAPONS+1; check++) {
+					if (lmsIndex[check] == i) { break; }
+					else if (lmsIndex[check] == -1) { k--; lmsIndex[check] = i; break; }
+				}
+			}
+		}
+		// Vanilla style weapon rotation (1 ranged, 1 rapid, 1 close, 1 power, 1 shield weapons)
+		else {
+			do	{	i = Random(0, maxWep); } while(getWepData(i, WEPDATA_WEPSLOT) != 2); lmsIndex[0] = i;
+			do	{	i = Random(0, maxWep); } while(getWepData(i, WEPDATA_WEPSLOT) != 3); lmsIndex[1] = i;
+			do	{	i = Random(0, maxWep); } while(getWepData(i, WEPDATA_WEPSLOT) != 4); lmsIndex[2] = i;
+			do	{	i = Random(0, maxWep); } while(getWepData(i, WEPDATA_WEPSLOT) != 5); lmsIndex[3] = i;
+			do	{	i = Random(0, maxWep); } while(getWepData(i, WEPDATA_WEPSLOT) != 7); lmsIndex[4] = i;		
+		}
+	}
+	
+	int pTID = 1000;
+	for (i = 0; i < ServerMAXxw; i++) { 
+		if (PlayerInGame(i)) { giveLMSweapons(pTID+i, FALSE);	}}
+}
+
+function void giveLMSweapons(int playerTID, bool isRespawning) {
+		// GAMESTATE_INPROGRESS = 2
+		if (GetGameModeState() == 2 && !isRespawning) { 
+			// one recipe mix bag is granted per ROUND
+			GiveActorInventory(playerTID, "Recipe Mix Item", 1);   }
+		//GiveActorInventory(playerTID, "ETank", 1);
+		for (int i = 0; i < LMS_BASE_WEAPONS+LMS_EXTRA_WEAPONS; i++) {
+			GiveActorInventory(playerTID, getWepData(lmsIndex[i], WEPDATA_GIVER), 1); }}
+
+
+
+	//////////////////////////////////////////////////////////
+//                   #1.4. Bot Control 							//
+	//////////////////////////////////////////////////////////
+
+
+script "Xover Bot Control" (int player) {
+	int tid = player+1000; int wait;
+	int theWep = -1; 
+	delay(1);
+	int indexLimit;
+	while (!(ClassifyActor(0) & ACTOR_DEAD)) {
+		indexLimit = getWepInventory(player,0);
+		
+		if (indexLimit > 1) {
+			theWep = xoverBotWeaponSwitch(player, theWep, indexLimit);
+			delay(2);
+			ACS_NamedExecuteAlways("Fill Ammo", 0, 400);
+		}
+		
+		if (random(0,4) == 0) { wait = 20; } // sometimes he be doing a quick juke
+		else { wait = random(55,140); }
+		while (!(ClassifyActor(0) & ACTOR_DEAD) && wait > 0) {
+			delay(1); wait--;	
+		}
+	}
+}
+
+function int xoverBotWeaponSwitch(int player, int oldWep, int indexLimit) {
+	int newWep = random(1,indexLimit-1); 
+	str newWepName;
+	if (getWepInventory(player,newWep) == oldWep) {
+		if (indexLimit != 2) { // > 2
+			// select the next weapon in the wepInventory instead
+			if (newWep == indexLimit-1) { newWep = 1; } 
+			else { newWep++; }
+		}
+		else { // their only weapon
+			newWep = getWepInventory(player,newWep);
+			if (oldWep != newWep) { SetWeapon(getWepData(newWep, WEPDATA_WEP)); }
+			return newWep;
+		}
+	}
+	newWep = getWepInventory(player,newWep);
+	
+	int ndWeapon;	
+	if (!botCombinedWeapon(player, newWep))
+	{
+		// try mixing the new weapon with the old one to make a ND weapon
+		ndWeapon = search(newWep, oldWep);
+		if (ndWeapon != -1) {		
+			if (oldWep < MAX_1D) { 
+				botIngredients[player][botIngredients[player][0]] = oldWep;
+				botIngredients[player][0]++; }
+			botIngredients[player][botIngredients[player][0]] = newWep;
+			botIngredients[player][0]++;
+			appendFusionEvent(player,ndWeapon,newWep,oldWep); 
+			newWep = ndWeapon;
+			newWepName = getWepData(newWep, WEPDATA_WEP);
+			GiveInventory(newWepName, 1);
+			SetWeapon(newWepName);
+			return newWep;
+		}
+	}
+	// vanilla weapon switch
+	if (oldWep >= MAX_1D) { 
+		// bots are more reticent to switch when they're using a 2D+ weapon
+		if ( random(1, (getWepData(oldWep, WEPDATA_TIER)-1)*7) != 1) 
+			{ return oldWep; }
+		clearBotIngredients(player);
+		clearFusionHistory(player);
+	}
+	newWepName = getWepData(newWep, WEPDATA_WEP);
+	SetWeapon(newWepName);
+	return newWep;
+}
+
+				
+
+	////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//                    #2. Xover Keybinds & settings		         			  //
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+							
+
+// cooldown information for XW keybinds
+bool keybindRefresh[ServerMAXxw][2];
+
+function void clearKeybindRefresh(int player) {
+	for (int i = 0; i < 2; i++) { keybindRefresh[player][i] = FALSE; }}
+	
+
+
+// the script executed on Xover-related input button
+script "Xover Keybinds" (int type) net
+{
+	int player = PlayerNumber();
+	// spectators are not allowed on operate on their table
+	// checking weapons on the map is allowed as a spectator, though
+	if (((ClassifyActor(0) & ACTOR_DEAD) || PlayerIsSpectator(player))) 
+		{ terminate; }
+	if (keybindRefresh[player][type]){
+		terminate; }
+	// that key becomes on cooldown for a brief time
+	keybindRefresh[player][type] = TRUE;
+	ACS_NamedExecuteAlways("Keybind Refresh", 0, player, type);
+	
+	/*// to do later : fix the code duplication by storing the bitmask in key ?
+	bit key;
+	if (type == 1) { key = BT_USER1; }
+	if (type == 2) { key = BT_USER2; }
+	*/
+	
+	int holdDuration;
+	if (type == 0) { holdDuration = (GetCVar("XW_HOLD_COMBINE")*35) >> 16; }
+	else if (type == 1) { holdDuration = (GetCVar("XW_HOLD_UNCOMBINE")*35) >> 16; }
+	//else { holdDuration = (GetCVar("XW_HOLD_INFORMATION")*35) >> 16; }
+	
+	int i = 0; int input;	
+	switch(type) {	
+		// append / fuse
+		case 0:
+			if (checkInventory("stopUncombine") || 
+				 (GetPlayerInput(-1, INPUT_BUTTONS) & BT_USER2)) { terminate; }
+			do { delay(1); i++; }  while((GetPlayerInput(-1, INPUT_BUTTONS) & BT_USER1) && i<holdDuration);
+			if (i < holdDuration)	{ 
+				if (!CheckInventory("isUncombining") && 
+					!CheckInventory("criticalSystemFusion") && 
+					!CheckInventory("noNextFusionInc")) { appendWeapon(player, GetWeapon()); }
+				else { terminate; }}
+			else if (!CheckInventory("isCombining") 
+				&& !CheckInventory("isUncombining")) {
+					ACS_NamedExecuteAlways("Weapon Combine", 0, player, FALSE, 0); }
+			else { terminate; }
+		break;
+		
+		// pop / uncombine
+		case 1:
+			do { delay(1); i++; } while((GetPlayerInput(-1, INPUT_BUTTONS) & BT_USER2) && i<holdDuration);
+			// disallow the concurrent access to the table of crafting
+			// if both pop and push are requested at time t, pop is 1 tic delayed so they proceed
+			// sequentially
+			if (!(GetPlayerInput(-1, INPUT_BUTTONS) & BT_USER1) && 
+					(GetPlayerInput(-1, INPUT_OLDBUTTONS) & BT_USER1)) { delay(1); }
+			if (i < holdDuration)	{ popWeapon(player, TRUE); }
+			else { ACS_NamedExecuteAlways("Weapon Uncombine", 0, player); }
+		break;
+		
+	}
+}			
+
+script "Keybind Refresh" (int player, int type) {
+	delay(3);
+	keybindRefresh[player][type] = FALSE; }
+
+
+
+
+
+
+// reset to default Xover preferences
+script "Xover Options" (int setting) net {
+	switch(setting) {
+		case 1:
+			SetCVar("XW_HOLD_COMBINE", 0.21);
+			SetCVar("XW_HOLD_UNCOMBINE", 0.15);
+			SetCVar("XW_HOLD_INFORMATION", 0.15);
+		break;
+		case 2:
+			SetResultValue(GetCVar("XW_AUTO_OPEN_WEAPON_MIX"));
+		break;
+	}
+}
+
+
+script "Xover NET Clientside" (int setting) net CLIENTSIDE {
+	if (ConsolePlayerNumber() != PlayerNumber()) { terminate; }
+	switch(setting) {
+		// Xover help menu
+		case CS_XOVER_HELP:
+			if (isHelpOpen) { terminate; }
+			
+			isHelpOpen = true;
+			LocalAmbientSound("MM1PAUSE", 127);
+			int helpScreen = 0; int input; bool action = true; bool first = true;
+			
+			
+			SetHudSize(800, 600, TRUE);
+			SetFont("XWMENUHX");
+			HudMessage(s:"A"; HUDMSG_PLAIN, 4269, 0, 312.0, 553.0, 0);
+			do {
+				if (input & BT_MOVELEFT || input & BT_LEFT) {
+					if (helpScreen == 0) { helpScreen = XOVER_HELP_SCREENS-1; }
+					else { helpScreen = (helpScreen-1) % XOVER_HELP_SCREENS; }
+					action = true;
+				}
+				else if (input & BT_MOVERIGHT || input & BT_RIGHT) {
+					helpScreen = (helpScreen+1) % XOVER_HELP_SCREENS; action = true;
+				}
+				
+				if (action) {
+					if (!first) { LocalAmbientSound("MM1SELCT", 127); }
+					first = false;
+					SetFont(StrParam(s:"XWHELP0", d:helpScreen));
+					HudMessage(s:"A"; HUDMSG_PLAIN, 4270, 0, 400.0, 300.0, 0);
+					action = false;
+					delay(9);
+				}
+				input = GetPlayerInput(-1, INPUT_BUTTONS);
+				delay(1);
+			} while (!(input & BT_ATTACK || input & BT_ALTATTACK));
+			closeHelpMenu();
+		break;
+		
+		
+		
+		case CS_WEAPON_INFORMATION:			
+			if (ConsolePlayerNumber() != PlayerNumber()) { terminate; }
+			int holdDuration = (GetCVar("XW_HOLD_INFORMATION")*35) >> 16;
+			int i = 0;
+			do { delay(1); i++; } while((GetPlayerInput(-1, INPUT_BUTTONS) & BT_USER3) && i<holdDuration);
+			if (i >= holdDuration) { ACS_NamedExecuteAlways("Map Weapons Display", 0); }
+			else {
+				if (weaponInformationOn || PlayerIsSpectator(PlayerNumber())) { terminate; }
+				weaponInformationOn = true;
+				ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_WEAPON_INFORMATION_WINDOW);
+				
+				
+				LocalAmbientSound("MM1PAUSE", 127);
+				str oldWep = "???"; str curWep;
+				
+				do { // cochon
+					curWep = GetWeapon();
+					if (curWep != oldWep) {
+						displayWeaponInformation(curWep, FALSE);
+						oldWep = curWep;					
+					}
+					input = GetPlayerInput(-1, INPUT_BUTTONS);
+					delay(1);
+				} while ( !(input & BT_USER3));
+				
+				// waiting for the release of USER3
+				while (GetPlayerInput(-1, INPUT_BUTTONS) & BT_USER3) { delay(1); }
+				
+				closeWeaponInformation();
+			}
+		break;
+	}
+}
+
+function void closeWeaponInformation(void) {
+	LocalAmbientSound("MM1PAUSE", 127);
+	weaponInformationOn = false;
+	ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_WEAPON_INFORMATION_WINDOW);
+	displayWeaponInformation(-1, TRUE);	
+}
+
+function void closeHelpMenu(void) {
+	HudMessage(s:""; HUDMSG_PLAIN, 4269, 0, 0, 0, 0.01);
+	HudMessage(s:""; HUDMSG_PLAIN, 4270, 0, 0, 0, 0.01);
+	isHelpOpen = false;			
+	ConsoleCommand("openmenu \"Xover Menu\"");
+}
+
+
+function void displayWeaponInformation(str weaponName, bool erase) {
+	if (erase) { 
+		for (int i = 5994; i < 5999; i++) { HudMessage(s:""; HUDMSG_PLAIN, i, 0, 356.0, 214.0, 0);	}
+		return; 
+	}
+	int index = wep2index(weaponName);
+	str tagName; int nameOffset; str wepInfo; str wepIcon; str wepRank;
+	if (index == -1) {
+		tagName = "???"; nameOffset = 0;
+		wepInfo = "";
+		wepIcon = "XWHELPUW";
+		wepRank = "TNT1A0";	
+	}
+	else {
+		tagName = getWepData(index, WEPDATA_TAGNAME);
+		nameOffset = max(StrLen(tagName)-10, 0); // Squish wep names longer than 10 chars
+		wepInfo = getWepData(index, WEPDATA_DESCRIPTION);
+		wepIcon = getWepData(index, WEPDATA_ICON);
+		wepRank = StrParam(s:"XWRANK", d:getWepData(index, WEPDATA_TIER));
+	}
+	
+	SetFont("CONFONT");
+	// weapon name
+	SetHudSize(432+(nameOffset*32), 270, TRUE);
+	HudMessage(s:tagName; HUDMSG_FADEINOUT, 5997, 0, 359.0+((nameOffset*27) << 16), 184.0, 5000.0, 0.1, 0);
+			
+	// weapon information
+	SetHudSize(800, 400, TRUE);
+	HudMessage(s:wepInfo; HUDMSG_TYPEON, 5998, 0, 635.0, 337.0, 5000.0, 0.017, 0);
+						
+	// icon
+	SetFont(wepIcon);
+	SetHudSize(320, 210, TRUE);
+	HudMessage(s:"A"; HUDMSG_PLAIN, 5995, 0, 223.0, 156.0, 0); // 231 156 perfect
+						
+	// rank
+	SetFont(wepRank);
+	SetHudSize(332, 210, TRUE);
+	HudMessage(s:"A"; HUDMSG_PLAIN, 5996, 0, 256.0, 131.0, 0);
+	
+	// icon animated border
+	SetHudSize(432, 270, TRUE);
+	SetFont("XWHELPWX");
+	HudMessage(s:"A"; HUDMSG_PLAIN, 5994, 0, 274.0, 164.0, 0);
+}
+
+		
+
+
+
+	////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//                    #3. Crafting Table						//
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+					
+					
+					
+	//////////////////////////////////////////////////////////
+//                   #3.1. Data Structures						//
+	//////////////////////////////////////////////////////////	
+
+
+//~~~~~~~~~~~~~~~ #3.1.1. Crafting Table ~~~~~~~~~~~~~~~//
+
+// weapon indexes currently in the crafting table
+int crafting_table[ServerMAXxw][TABLECAPACITY];
+
+function void clearCraftingTable(int player) {
+	for (int i = 0; i < TABLECAPACITY; i++)	{ 	crafting_table[player][i] = -1;	}
+	clearFusionPrediction(player); }
+
+function void printCraftingTable(int player) { // for i in range(TABLECAPACITY)
+			Log(s:"[", s:getWepData(crafting_table[player][0], WEPDATA_TAGNAME), s: "  ", 
+						s:getWepData(crafting_table[player][1], WEPDATA_TAGNAME), s: "  ", 
+						s:getWepData(crafting_table[player][2], WEPDATA_TAGNAME), s: "  ", 
+						s:getWepData(crafting_table[player][3], WEPDATA_TAGNAME), s: "  ", 
+						s:getWepData(crafting_table[player][4], WEPDATA_TAGNAME), s: "]"); }
+						
+						
+						
+//~~~~~~~~~~~~~~~ #3.1.2. Fusion Prediction	~~~~~~~~~~~~~~~//
+						
+// stores the sequential list of recipes produced by the current crafting table state
+// [lastUnusedSlot, firstFusion, secondFusion..4thFusion]
+int fusionPrediction[ServerMAXxw][1+TABLECAPACITY];
+
+function void clearFusionPrediction(int player) {
+	fusionPrediction[player][0] = 0;
+	for (int i = 1; i < TABLECAPACITY+1; i++) {
+		fusionPrediction[player][i] = -1;}}
+
+function void printFusionPrediction(int player) {
+			Log(s:"[", d:fusionPrediction[player][0], s: ",", 
+						d:fusionPrediction[player][1], s: ",", 
+						d:fusionPrediction[player][2], s: ",", 
+						d:fusionPrediction[player][3], s: ",", 
+						d:fusionPrediction[player][4], s: ",", 
+						d:fusionPrediction[player][5], s: "]");}
+						
+						
+//~~~~~~~~~~~~~~~ #3.1.3. Fusion History	~~~~~~~~~~~~~~~//
+
+// links a fusion to its two ingredients
+// [fusionIndex, ingredient1Index, ingredient2Index]
+// fusionIndex = 0 is a special value, it keeps tracks of fusions which should be 
+// uncombined and their ingredients given on death=>respawn
+
+// for each player :
+// [plannedANDcombinedFusionCount, fusionEventWrite, ...[recipe,wep1,wep2]]
+global int 55: fusionHistory[]; //[2*ServerMAXxw + (ServerMAXxw * FUSIONLIMIT * 3)]
+
+/* plannedANDcombinedFusionCount => how much fusions are made (committed) &
+	planned (in crafting table, waiting to be combined) coded on two values
+	val % (FUSIONLIMIT+1) ==> commited fusion count
+	val / (FUSIONLIMIT+1) ==> planned fusion count
+	
+	0 < fusionEventWrite < FUSIONLIMIT ==> index (plus 1) of currently combined fusion event
+	fusionEventWrite >= FUSIONLIMIT if recipe ID of currently uncombined fusion event
+	fusionEventWrite == 0 else
+ */
+
+// (combined + planned) fusion count
+function int getFusionCount(int player) {
+	return fusionHistory[player*FUSION_HISTORY_SIZE]; }
+	
+function void setFusionCount(int player, int value) {
+	fusionHistory[player*FUSION_HISTORY_SIZE] = value; }
+	
+function void clearPlannedFusionCount(int player) {
+	fusionHistory[player*FUSION_HISTORY_SIZE] %= (FUSIONLIMIT+1); }
+	
+function void decrFusionCount(int player) {
+	fusionHistory[player*FUSION_HISTORY_SIZE]--; }
+	
+// fusion event or recipe ID currently undergoing a writing operation 
+function int getFusionEventWrite(int player) {
+	return fusionHistory[1+(player*FUSION_HISTORY_SIZE)]; }
+	
+function void setFusionEventWrite(int player, int value) {
+	fusionHistory[1+(player*FUSION_HISTORY_SIZE)] = value; }
+	
+// (recipe, ingredient1, ingredient2) tuple
+function int getFusionHistory(int player, int fusion, int data) {
+	return fusionHistory[2 + (player*FUSION_HISTORY_SIZE + fusion*3 + data)]; }
+
+function void setFusionHistory(int player, int fusion, int data, int value) {
+	fusionHistory[2 + (player*FUSION_HISTORY_SIZE + fusion*3 + data)] = value; }
+
+
+
+
+
+// checks if YES or NO this recipe is registered in the history, return its index
+function int getRecipeFusionHistory (int recipe, int player) {
+	for (int i = 0; i < FUSIONLIMIT; i++) {
+		if (getFusionHistory(player,i,0) == recipe) { return i; }}
+	return -1;}
+	
+function void clearFusionHistory (int player) {
+	setFusionCount(player, 0);
+	//setFusionEventWrite(player,0);
+	for (int i = 0; i < FUSIONLIMIT; i++) { popFusionEventIndex(player, i); }
+}
+
+// mark recipes to uncombine, for the respawn
+function void xoverDowngrade(int player) {
+	int x = getFusionEventWrite(player);
+	int critical = 0;
+	if (x < MAX_1D && x) { critical = x; }
+	
+	for (int i = 0; i < FUSIONLIMIT; i++) {
+		x = getFusionHistory(player,i,0);
+		if (x != -1) { 
+			if (critical) { 
+				if (x == getFusionHistory(player,critical-1,1) ||
+					x == getFusionHistory(player,critical-1,2)) { continue; }}
+			if (CheckInventory(getWepData(x, WEPDATA_WEP))) {
+					setFusionHistory(player,i,0,0); }}}
+}
+	
+// restore ingredients from recipes marked by the above method
+function void restoreXoverIngredients(int player) {
+	int wep1; int wep2; int wep1tier; int wep2tier; int x;
+	for (int i = 0; i < FUSIONLIMIT; i++) {
+		x = getFusionHistory(player,i,0);
+		if (x == -1) { continue; }
+		wep1 = getFusionHistory(player,i,1); wep2 = getFusionHistory(player,i,2);
+		if (!x) {   
+			GiveInventory(getWepData(wep1, WEPDATA_WEP), 1);
+					GiveInventory(getWepData(wep2, WEPDATA_WEP), 1);
+					decrFusionCount(player);
+					popFusionEventIndex(player, i); }
+					
+		wep1tier = getWepData(wep1, WEPDATA_TIER); wep2tier = getWepData(wep2, WEPDATA_TIER);
+		if (wep1tier == 1) { restoreAXoverIngredient(player, wep1); }
+		if (wep2tier == 1) { restoreAXoverIngredient(player, wep2); }
+	}
+}
+
+function void restoreAXoverIngredient(int player, int weapon) {
+	GiveInventory(getWepData(weapon, WEPDATA_FLAG), 1);
+	GiveInventory(getWepData(weapon, WEPDATA_AMMO), 1792);
+	setWepInventory(player, getWepInventory(player,0),weapon);
+	incrWepInventory(player); 
+}
+
+
+		
+
+function int appendFusionEvent(int player, int recipe, int i1, int i2) {
+	for (int i = 0; i < FUSIONLIMIT; i++) {
+		if (getFusionHistory(player,i,0) == -1) {
+			setFusionHistory(player,i,0,recipe);
+			setFusionHistory(player,i,1,i1);
+			setFusionHistory(player,i,2,i2);
+			return i; } }
+	Log(s:"append fusion fail : fusion list limit reached!");
+	return -1; }
+
+function bool popFusionEvent(int player, int recipe) {
+	for (int i = 0; i < FUSIONLIMIT; i++) {
+		if (getFusionHistory(player,i,0) == recipe) {
+			setFusionHistory(player,i,0,-1);
+			setFusionHistory(player,i,1,-1);
+			setFusionHistory(player,i,2,-1);
+			return TRUE; } }
+	Log(s:"pop fusion fail : couldn't find the fusion to pop!");	
+	return FALSE;	
+}
+
+function void popFusionEventIndex(int player, int i) {
+	setFusionHistory(player,i,0,-1);
+	setFusionHistory(player,i,1,-1);
+	setFusionHistory(player,i,2,-1);
+}
+
+
+
+function void printFusionHistory(int player) {
+	int committed = getFusionCount(player) % FUSIONLIMITplus1;
+	int predicted = getFusionCount(player) / FUSIONLIMITplus1;
+	Log(s:"Fusion count = ", d:committed+predicted, s:" (", d:committed,
+		s:" committed, ", d:predicted, s:" predicted)");
+	Log(s:"Writing operation = ", d:getFusionEventWrite(player));
+	for (int i = 0; i < FUSIONLIMIT; i++) {
+		Log(s:"Fusion ", d:i+1, s:" ", 
+			s:getWepData(getFusionHistory(player,i,0), WEPDATA_RADICAL), s:" ",
+			s:getWepData(getFusionHistory(player,i,1), WEPDATA_RADICAL), s:" ",
+			s:getWepData(getFusionHistory(player,i,2), WEPDATA_RADICAL), s:" "); }}
+			
+				
+				
+	//////////////////////////////////////////////////////////
+//                   #3.2. Events								//
+	//////////////////////////////////////////////////////////	
+
+function void appendWeapon(int player, str weapon)
+{
+	int weaponI = wep2index(weapon);
+	if (!isIngredient(weaponI))	{	
+		ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_NOT_INGREDIENT); return ; }
+	// Open the table if it was empty
+	if (fusionPrediction[player][0] == 0) {
+		SetInventory("XW Recipe Price", 0);
+		ctOperate(weaponI, player, 
+			FALSE + (getWepData(weaponI, WEPDATA_TIER)-1)*2); }
+	for (int j = 0; j < TABLECAPACITY; j++) {
+		if (crafting_table[player][j] == weaponI)	{	
+			ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_WEP_INSERTED, j);
+			return;	}	
+		else if (crafting_table[player][j] == -1)	{
+			
+			// trying to add another weapon over a previous non-working combination just
+			// prevents the new weapon from being added (QoL feature)
+			if (j >= 2 && (fusionPrediction[player][j] == -1))
+				{ return; }
+			
+			crafting_table[player][j] = weaponI;
+			TakeInventory("stopWeaponBlink", 5);
+			
+			// update the fusion predictions
+			if (j == 0) { fusionPrediction[player][0]++; fusionPrediction[player][1] = weaponI; }
+			else {
+				int lastFusionIndex = fusionPrediction[player][0];
+				int recipe = search(fusionPrediction[player][lastFusionIndex], weaponI);
+				fusionPrediction[player][0]++;
+				lastFusionIndex++;
+				if (!(recipe == -1)) { 	
+						// check if fusion is owned, OR was used in the making of a higher fusion
+						if (getRecipeFusionHistory(recipe, player) != -1) { 
+							ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_RECIPE_OWNED);
+							popWeapon(player, FALSE); }
+						// check if fusion limit is reached
+						else if (
+							((getFusionCount(player) / FUSIONLIMITplus1) +
+							(getFusionCount(player) % FUSIONLIMITplus1))
+							>= FUSIONLIMIT) { 
+							ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_FUSION_LIMIT); 
+							popWeapon(player, FALSE);}
+						else { 
+							fusionPrediction[player][lastFusionIndex] = recipe; 
+							setFusionCount(player, getFusionCount(player)+FUSIONLIMITplus1); 
+							// first fusion of the chain
+							if (lastFusionIndex == 2) {
+								playerFusionCost[player] = (getWepData(recipe, WEPDATA_TIER)-2)*TABLECAPACITYdown1; 
+								}
+							else { playerFusionCost[player] += 1; }
+							if (!isScrewsFree()) { SetInventory("XW Recipe Price", combineStatusToPrice(playerFusionCost[player], FALSE)); }
+						}
+				}
+			}
+			showTable(player); 
+			if (!isScrewsFree()) { ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_FUSION_COST); }
+			int recipeI = fusionPrediction[player][lastFusionIndex];
+			int recipeTier = getWepData(recipeI, WEPDATA_TIER);
+			ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_ELECTRICITY, 
+							//!(CheckInventory(getWep(wepI))) && 
+							recipeI,
+							(((lastFusionIndex > 1) && (recipeI != -1))*5) + 
+								recipeTier-1);
+							// encoding two arguments in that third argument
+							// [0,9] ==> [0,1]x[0,4]
+			return; }
+	}
+	return;
+}
+
+function void popWeapon(int player, bool printTable) {
+	int lowerBound; bool fusionDecrease;
+	if (CheckInventory("noNextFusionInc")) { lowerBound = 1; }
+	else if (CheckInventory("isCombining")) { lowerBound = 2; }
+	else { lowerBound = 0; }
+	for (int j = TABLECAPACITYdown1; j >= lowerBound; j--) {	
+		if (crafting_table[player][j] != -1)	{
+			crafting_table[player][j] = -1;	
+			
+			TakeInventory("stopWeaponBlink", TABLECAPACITY);
+			GiveInventory("stopWeaponBlink", j+1);
+			if (printTable) { showTable(player); }
+			TakeInventory("stopElectricity", 1);
+			GiveInventory("stopElectricity", 1);
+			
+			int index = fusionPrediction[player][0];
+			int weaponI = fusionPrediction[player][index];
+			fusionDecrease = (weaponI != -1) && !(CheckInventory(getWepData(weaponI, WEPDATA_WEP)));
+	
+			fusionPrediction[player][index] = -1;
+			fusionPrediction[player][0]--; index--;
+			int weaponIDown = fusionPrediction[player][index];
+			int weaponItier = getWepData(weaponIDown, WEPDATA_TIER);
+			if (fusionDecrease) {
+				if (index == 1) { playerFusionCost[player] = -1; }
+				else { playerFusionCost[player] -= 1; }
+				
+				}
+			if (printTable) {			
+				if (index == 0) { ctOperate(-1, player, FALSE); }
+				else if (fusionDecrease) {
+					setFusionCount(player, getFusionCount(player)-FUSIONLIMITplus1);
+					ACS_NamedExecuteAlways("XW Simple Clientside", 0,
+							CS_C_TABLE_SEGFAULT,
+							weaponItier, // prevTier -1 ?
+							(crafting_table[player][1] == -1));
+							if (!isScrewsFree()) {
+								SetInventory("XW Recipe Price", combineStatusToPrice(playerFusionCost[player], FALSE));
+								ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_FUSION_COST);	}
+							ACS_NamedExecuteAlways("XW Simple Clientside", 0, 
+								CS_FUSION_PREVIEW, weaponItier-1, weaponIDown);
+							return; }			
+			}
+			LocalAmbientSound("POPWEP", 127);
+			return;	}
+	}
+}
+
+
+
+// attempts to combine the first 2 weapons, recursively re-call if a chain is possible
+script "Weapon Combine"(int player, int chain, int screwPrice) {
+
+	int recipeIndex = fusionPrediction[player][2];
+	if (recipeIndex == -1)	{ 
+		LocalAmbientSound("XWERROR", 127); terminate;	}
+	int playerCombineStatus = playerFusionCost[player];
+	if (!chain) {
+		if (isScrewsFree()) { screwPrice = 0; }
+		else if (CheckInventory("XW Screw Count") < combineStatusToPrice(playerCombineStatus, FALSE)) { 
+			ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_NOT_ENOUGH_SCREWS);   terminate; }	
+		else { screwPrice = combineStatusToPrice(playerCombineStatus, TRUE);  }}
+	///////////////////////////////////////////////
+	//              FUSION PROCESS               //
+	///////////////////////////////////////////////
+	GiveInventory("isCombining", 1);
+	int ing1 = crafting_table[player][0];
+	int ing2 = crafting_table[player][1];
+	int animTime = 20; // 35
+	ACS_NamedExecuteAlways("Fusion Animation 1", 0, ing2, animTime);
+	for (int i = animTime; i > 0; i -= 2) {
+		delay(1);
+		if (ClassifyActor(0) & ACTOR_DEAD) { terminate; }}
+	
+	animTime = 37;
+	LocalAmbientSound(strParam(s:"WEPFUSE", d:chain+1), 127);
+	ACS_NamedExecuteAlways("Fusion Animation 2", 0, ing1, ing2, animTime);
+	for (i = animTime; i > 0; i--) {
+		delay(1); if (ClassifyActor(0) & ACTOR_DEAD) { terminate; }}
+		
+	str ing1name = getWepData(ing1, WEPDATA_WEP);
+	str ing2name = getWepData(ing2, WEPDATA_WEP);
+	crafting_table[player][0] = recipeIndex;	
+	
+	// values shift
+	for (int j = 1; j < TABLECAPACITYdown1; j++) {
+		crafting_table[player][j] = crafting_table[player][j+1]; }
+	crafting_table[player][j] = -1;
+	
+	for (int k = 1; k < fusionPrediction[player][0]; k++) {
+		fusionPrediction[player][k] = fusionPrediction[player][k+1];}
+	fusionPrediction[player][k] = -1;
+	fusionPrediction[player][0]--;
+	
+	
+	setFusionCount(player, getFusionCount(player)+1-FUSIONLIMITplus1);
+	setFusionEventWrite(player,
+		appendFusionEvent(player, recipeIndex, ing1, ing2)+1
+	);
+	
+	if (screwPrice) { TakeInventory("XW Screw Count", screwPrice); }
+	
+	bool anotherFusion = fusionPrediction[player][2] != -1;
+	if (!anotherFusion) { GiveInventory("noNextFusionInc", 1);
+							playerFusionCost[player] = -1; }
+	else { playerFusionCost[player] += TABLECAPACITYdown1SQR; }
+	
+	int ndTier = getWepData(recipeIndex, WEPDATA_TIER);		
+	LocalAmbientSound(strParam(s:"WEPCRFT", d:chain+1), 127);
+	ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_WEAPON_MESSAGE, 
+				recipeIndex, (ndTier * ServerMAXxw)+player);
+	// encoding player number and weapon tier into one value
+	
+	GiveInventory("criticalSystemFusion", 1);
+
+	animTime = 5;	// animTime * 2 tics
+	ACS_NamedExecuteAlways("Fusion Animation 3", 0, recipeIndex,
+				animTime, lastFusionTip[player]);					
+
+	str recipe = getWepData(recipeIndex, WEPDATA_WEP);
+	GiveInventory(recipe, 1);
+	
+	showTable(player);		
+	
+	if (!isScrewsFree()) {
+		screwPrice = combineStatusToPrice(playerFusionCost[player], TRUE);
+		SetInventory("XW Recipe Price", screwPrice);
+		ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_FUSION_COST);	}
+	
+	/*for (int flashes = 0; flashes < animTime; flashes++) {		
+		delay(2);
+		if (ClassifyActor(0) & ACTOR_DEAD) { terminate; } }
+	
+	SetWeapon(recipe);	*/
+	int waitingReduced = 0;
+	// take the ingredients when they're not being selected
+	do {
+		SetWeapon(recipe);	
+		delay(1); waitingReduced++; 
+		if (ClassifyActor(0) & ACTOR_DEAD) { terminate; }	
+	} while (checkWeapon(ing1name) || checkWeapon(ing2name));
+	setFusionEventWrite(player, 0);
+	
+	TakeInventory("criticalSystemFusion", 1);
+	TakeInventory(ing1name, 1);
+	TakeInventory(ing2name, 1);
+	
+	bool chainIt = (anotherFusion && !(CheckInventory("XW Screw Count") < screwPrice));
+	int intraFuseTime = 40 - (chainIt*20) + (animTime*2); // flashes time
+	if (waitingReduced < intraFuseTime) { 
+		for (int z = intraFuseTime; z > waitingReduced; z--) {			
+			delay(1); if (ClassifyActor(0) & ACTOR_DEAD) { terminate; } }}
+	TakeInventory("isCombining", 1);
+	
+	if (chainIt) {  ACS_NamedExecuteAlways("Weapon Combine", 0, player, 
+				chain+1, screwPrice); terminate; }
+	
+	// The fusion chain finished :
+	TakeInventory("noNextFusionInc", 1);		
+	//updateFusionChain(player, chain);
+	if (GetCVar("XW_AUTO_CLOSE_CRAFTING_TABLE")) { 
+		clearCraftingTable(player); 
+		ctOperate(-1, player, FALSE); 
+		showTable(player);
+	}
+	terminate; }
+
+
+script "Weapon Uncombine"(int player) {
+	if (CheckInventory("isUncombining") || CheckInventory("criticalSystemFusion")) { 
+				terminate; }
+	// Is the selected weapon a fusion, and not being combined ?
+	str recipeWep = GetWeapon();	
+	int recipeWepI = wep2index(recipeWep); 	
+	if((!isFusion(recipeWepI)) || 
+		//This weapon is being consumed for a fusion! (or disabled uncombine for element 2 without next fusion)"); 
+		(CheckInventory("isCombining") && 
+			(crafting_table[player][0] == recipeWepI || 
+				((crafting_table[player][1] == recipeWepI) && (!CheckInventory("noNextFusionInc"))))))
+			{ terminate; }
+			
+	GiveInventory("stopUncombine", 1);
+	int recipeHistoryI = getRecipeFusionHistory(recipeWepI, player);
+	
+	
+	// Extract data from the weapon to uncombine
+	int first = getFusionHistory(player,recipeHistoryI,1);
+	int second = getFusionHistory(player,recipeHistoryI,2);
+	
+		
+	int key = GetPlayerInput(-1, INPUT_BUTTONS);
+	bool wasHoldingAppend = key & BT_USER1; int displayCD = 0;
+	bool confirm; bool notAvailable; bool volition; bool dead; bool hasSwitched;
+	do {
+		if (displayCD == 0) { displayCD = 8; 
+			ACS_NamedExecuteAlways("Uncombine Screen", 0, first, second); }
+		else { displayCD--; }
+		delay(1);
+		key = GetPlayerInput(-1, INPUT_BUTTONS);
+		if (wasHoldingAppend) { 
+			if (!(key & BT_USER1)) { wasHoldingAppend = false; }}
+		confirm = (key & BT_USER1) && !wasHoldingAppend;
+		volition = (key & BT_USER2);
+		dead = (ClassifyActor(0) & ACTOR_DEAD);
+		notAvailable = (CheckInventory("isCombining") && 
+			(crafting_table[player][0] == recipeWepI || 
+				((crafting_table[player][1] == recipeWepI) && (!CheckInventory("noNextFusionInc")))));
+		hasSwitched = (GetWeapon() != recipeWep);
+	}
+	while (volition && !confirm && !dead && !notAvailable && !hasSwitched);
+	TakeInventory("stopUncombine", 1);			
+	if (dead || !volition || notAvailable || hasSwitched) { terminate; }
+		
+	// Uncombining a weapon inserted in the crafting table pops every weapon
+	// until that weapon to uncombine (included). Easier to code AND more user-friendly this way
+	int maxPop = fusionPrediction[player][0]; int val;
+	for (int i = TABLECAPACITYdown1; i >= 0; i--) {
+		val = crafting_table[player][i];
+		if (val == recipeWepI) {
+				for (int k = 0; k < maxPop-i; k++) { popWeapon(player, (k == maxPop-i-1)); }
+			break; }}
+	
+	str firstWep = getWepData(first, WEPDATA_WEP);
+	GiveInventory(firstWep, 1);
+	GiveInventory(getWepData(second, WEPDATA_WEP), 1);
+	decrFusionCount(player);
+	ACS_NamedExecuteAlways("Uncombine Split", 0, first, second);
+	if (popFusionEvent(player, recipeWepI)) { 
+		setFusionEventWrite(player, recipeWepI);
+	}	
+	GiveInventory("isUncombining", 1);
+	while (CheckWeapon(recipeWep))	{	
+		SetWeapon(firstWep);
+		delay(1); if (ClassifyActor(0) & ACTOR_DEAD) {terminate;}	}
+	TakeInventory(recipeWep, 1);
+	setFusionEventWrite(player, 0);
+	//while (getPlayerinput(-1, INPUT_BUTTONS) & BT_USER1) { delay(1); 
+	//		if (ClassifyActor(0) & ACTOR_DEAD) { terminate; } }
+	TakeInventory("isUncombining", 1); }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+				
+
+	////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//                    #4. ND Weapon Structure			         			  //
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+					
+// dynamically updates the ammo bars the switched to ND weapon consumes.
+// [numberOfAmmosN, wep1, wep2...wepN]
+int xover_ammos[ServerMAXxw][17];
+		
+
+	//////////////////////////////////////////////////////////
+//                   #4.1. Ammo Computation						//
+	//////////////////////////////////////////////////////////	
+
+// computes the ammos the switched to ND weapon consumes
+script "Ammo Update" (void) {
+	int player = PlayerNumber();
+	int prevAmmos = xover_ammos[player][0];
+	xover_ammos[player][0] = 0;
+	recursiveAmmoUpdate(wep2index(GetWeapon()), player);
+	displayAmmo(player); 
+	int afterAmmos = xover_ammos[player][0];
+	if (afterAmmos < prevAmmos) {
+		ACS_NamedExecuteWithResult("Ammo Hide Clientside", 1+afterAmmos, prevAmmos+1, player);	
+	}
+	SetInventory("Xover Bars", xover_ammos[player][0]);
+}
+	
+function void recursiveAmmoUpdate(int weapon, int player) {
+	//base case : 1-ammo weapon (base ingredient / vanilla weapon)
+	if (!isFusion(weapon)) { 
+		xover_ammos[player][0]++;
+		xover_ammos[player][xover_ammos[player][0]] = weapon; 
+		}
+	//  recursivity : n-ammos weapons
+	else {		
+		for (int i = 0; i < FUSIONLIMIT; i++) {
+			if (getFusionHistory(player,i,0) == weapon) {
+					int first = getFusionHistory(player,i,1);
+					int second = getFusionHistory(player,i,2);
+					break;}}		
+		recursiveAmmoUpdate(first, player);
+		recursiveAmmoUpdate(second, player);}
+}
+
+	//////////////////////////////////////////////////////////
+//                   #4.2. Ammo Check & Consume					//
+	//////////////////////////////////////////////////////////	
+
+script "Ammo Check" (int ammoAmount) {
+	int player = PlayerNumber(); 
+	if (!(PlayerIsBot(player) || GetCVar("sv_infiniteammo"))) { // bot privilege
+		str ammoName;
+		int ammosCount = max(CheckInventory("Xover Bars"), 2);
+		ammoAmount /= ammosCount;
+		SetFont("BIGFONT");
+		//HudMessage(d:ammosCount; HUDMSG_PLAIN, 7599, CR_YELLOW, 0.7, 0.5, 250.0, 1.0);
+		for (int i = 0; i < ammosCount; i++) {
+			ammoName = getWepData(xover_ammos[player][i+1], WEPDATA_AMMO);
+			if (!(CheckInventory(ammoName) >= ammoAmount)) { setResultValue(FALSE); 
+															terminate; }}
+	}
+	setResultValue(TRUE);
+}
+
+script "Ammo Consume" (int ammoAmount) {
+	int player = PlayerNumber(); 
+	if (GetCVar("sv_infiniteammo") || PlayerIsBot(player)) { terminate; }
+	int ammosCount = xover_ammos[player][0];
+	ammoAmount /= max(2,ammosCount);
+	for (int i = 1; i < ammosCount+1; i++) {
+		TakeInventory(getWepData(xover_ammos[player][i], WEPDATA_AMMO), ammoAmount); }
+		
+	//ACS_NamedExecuteAlways("Ammo Hide", 0);
+	
+	displayAmmo(player);
+}
+
+
+	//////////////////////////////////////////////////////////
+//                   #4.3. Ammo Refill							//
+	//////////////////////////////////////////////////////////	
+
+
+script "Fill Ammo" (int amount) {
+	if (CheckInventory("AmmoRecentlyChecked")) { SetResultValue(FALSE); terminate; }
+	str weaponName = GetWeapon();
+	int wepI = wep2index(weaponName);
+	// Vanilla weapon
+	if (wepI != -1 && (wepI < MAX_1D)) { 
+		setResultValue(vanillaRefill(wepI, amount, FALSE)); }
+	// ND weapon
+	else if (isFusion(wepI)) {
+		int player = PlayerNumber();
+		int ammos = xover_ammos[player][0];
+		for (int i = 1; i < (ammos+1); i++) {
+			if (CheckInventory(getWepData(xover_ammos[player][i], WEPDATA_AMMO)) < 1792) {
+				//amount /= ammos;
+				for (int j = i; j < (ammos+1); j++) {
+					int ammoI = xover_ammos[player][j];
+					if (ammoI == 15) { int coeff = 0.25; } else { coeff = 1.0; } // TimeStopper pls
+					GiveInventory(getWepData(xover_ammos[player][j], WEPDATA_AMMO), 
+						FixedMul((((amount * 1792)/100)/ammos),coeff));	
+					}
+				SetResultValue(TRUE); 
+				displayAmmo(player); 
+				terminate;}
+		}
+		if(CheckInventory("EnergyBalancerActive")) { setResultValue(xwNRGBalancer(amount)); terminate; }
+		else { GiveInventory("AmmoRecentlyChecked", 1); setResultValue(FALSE); terminate; }}
+	else	{	 
+		if(CheckInventory("EnergyBalancerActive")) { setResultValue(xwNRGBalancer(amount)); terminate; }
+		else { GiveInventory("AmmoRecentlyChecked", 1);  setResultValue(FALSE);	}}}			
+		
+				
+script "Fill Ammo MTank" (void) {
+	int player = PlayerNumber();
+	for (int i = 1; i < getWepInventory(player,0); i++) {
+		GiveInventory(getWepData(getWepInventory(player,i), WEPDATA_AMMO), 1792); }
+		
+	if (isFusion(wep2index(GetWeapon()))) {
+		displayAmmo(PlayerNumber()); }}			
+		
+function bool vanillaRefill(int wepI, int amount, bool energyBalancer) {
+	str ammo; int ammoSize;
+	ammo = getWepData(wepI, WEPDATA_AMMO); ammoSize = 1792;
+	if(CheckInventory(ammo) >= ammoSize) { 
+		if(CheckInventory("EnergyBalancerActive") && !energyBalancer) { return xwNRGBalancer(amount); }
+		else { GiveInventory("AmmoRecentlyChecked", 1); return FALSE; }}
+	else { 
+		int coeff;
+		if (wepI == 15) { coeff = 0.25; } else { coeff = 1.0; } // TimeStopper pls
+		int toGive = FixedMul((amount * ammoSize) / 100, coeff);
+		GiveInventory(ammo, toGive);
+		return TRUE;}
+	Log(s:"vanilla refill ended strangely");
+	return FALSE; }
+				
+				
+	//////////////////////////////////////////////////////////
+//                   #4.4. Energy Balancer Refill				//
+	//////////////////////////////////////////////////////////	
+				
+
+// to do later : put this in the same scope where it belongs
+int eBalancerAmmos[17]; 
+// If the lowest ammo% belongs to a XW Weapon, split the ammo gain among all of that weapon's ammos
+function bool xwNRGBalancer(int amount) {
+	int player = PlayerNumber();
+	int MinRatio = 1.0;
+	int CurrentRatio;
+	int lowestWeapon = -1;
+	int weaponIndex;
+	str ammoName;
+	
+	for (int i = 1; i < getWepInventory(player,0); i++) {
+		weaponIndex = getWepInventory(player,i);
+			ammoName = getWepData(weaponIndex, WEPDATA_AMMO);
+			CurrentRatio = 1.0*CheckInventory(ammoName)/1792;
+			if (CurrentRatio < MinRatio) { lowestWeapon = weaponIndex; MinRatio = CurrentRatio; }}
+		
+	
+	if (lowestWeapon == -1) { GiveInventory("AmmoRecentlyChecked", 1); return FALSE; }
+	else {
+		// if the lowest ammo is a vanilla/single weapon
+		if (CheckInventory(getWepData(lowestWeapon, WEPDATA_WEP))) {
+				return vanillaRefill(lowestWeapon, amount, TRUE); }
+		// if the lowest ammo belongs to a ND weapon
+		else {
+			// finds the highest tier ND weapon using this lowest ammo weapon
+			int XWroot = findWeaponRoot(lowestWeapon, player);			
+			eBalancerAmmos[0] = 0;
+			wepBaseIngredients(XWroot, player);
+			int ammos = eBalancerAmmos[0];
+			amount = ((amount * 1792)/100/ammos);
+			
+			int index;
+			for (int k = 1; k < eBalancerAmmos[0]+1; k++) {
+				index = eBalancerAmmos[k]; if (index == 15) { int coeff = 0.25; } else { coeff = 1.0; } // T.Stopper pls
+				GiveInventory(getWepData(index, WEPDATA_AMMO), FixedMul(amount, coeff));
+				}
+			return TRUE; }}
+	
+	// should be unreachable
+	Log(s:"huh huh heh how did you find me :x");
+	return FALSE;
+}				
+
+// retrieve all 1D cousins weapons of root
+function void wepBaseIngredients(int root, int player) {
+	if (!isFusion(root)) { eBalancerAmmos[0]++; eBalancerAmmos[eBalancerAmmos[0]] = root; }
+	else {
+		for (int i = 0; i < FUSIONLIMIT; i++) {
+			if (getFusionHistory(player,i,0) == root) {
+					wepBaseIngredients(getFusionHistory(player,i,1), player);
+					wepBaseIngredients(getFusionHistory(player,i,2), player);
+					return;}}
+		Log(s:"wait, couldnt find wep base ingredient of a fusion..?"); }}
+				
+// retrieves highest tier weapon wepI is a n-deep-child ingredient of
+function int findWeaponRoot(int wepI, int player) {
+	int recipeI;
+	for (int i = 0; i < FUSIONLIMIT; i++) {
+			if (getFusionHistory(player,i,1) == wepI || 
+				getFusionHistory(player,i,2) == wepI) {
+					return findWeaponRoot(getFusionHistory(player,i,0), player); }}
+	return wepI;}				
+				
+				
+				
+				
+
+
+	////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//                		    #5. Screws								//
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+
+/*
+#DEFINE SCREWS_ROUND 25
+#DEFINE XW_SCREWS_PL 6
+#DEFINE XW_SCREWS_PL_POW XW_SCREWS_PL * XW_SCREWS_PL
+*/
+
+function void startingScrews (int player) {
+	if(isScrewsFree()) {	
+		GiveInventory("noScrewsHud", 1); return; }
+	else {
+		TakeInventory("noScrewsHud", 1);
+		if (!GetCVar("cooperative")) { GiveInventory("XW Screw Count", 50); }
+		/*int step = max(0,XW_SCREWS_PL-PlayerCount());
+		step *= step; // pow(step, 2)
+		GiveInventory("XW Screw Count", 
+			((base - (base * step)/XW_SCREWS_PL_POW)/SCREWS_ROUND)*SCREWS_ROUND);*/
+	}
+}
+
+
+script "Artificial Respawn" (int size) {
+	if (!GetCVar("sv_itemrespawn")) { terminate; }
+	int posX = GetActorX(0); int posY = GetActorY(0); int posZ = GetActorZ(0);
+	while(ClassifyActor(0) != ACTOR_WORLD) {		delay(30);	}
+	
+	// respawn cooldown
+	delay((18+(isScrewsFree()*12))*35); // vanilla : (30*35)
+	
+	// to upgrade when dynamic arrays exist
+	str toSpawn;
+	switch(size) {
+		case 1: toSpawn = "Small"; break;
+		case 2: toSpawn = "Medium"; break;
+		case 3: toSpawn = "Large"; break; }
+	toSpawn = strParam(s:"XW Item ", s:toSpawn);
+	screwsRespawn(posX, posY, posZ, size);
+	SpawnForced(toSpawn, posX, posY, posZ, 6735);
+	SpawnForced("ItemFog", posX, posY, posZ); }
+
+
+
+
+
+
+
+
+
+	////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//                		    #6. Miscellaneous								//
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+			
+
+
+				// /!\ Magic number /!\
+script "Xover Giver" (int wepI) {
+	str wepFlag = getWepData(wepI, WEPDATA_FLAG);
+	if (CheckInventory(wepFlag)) { setResultValue(FALSE); }
+	else 
+	{
+		str weaponName = getWepData(wepI, WEPDATA_WEP);
+		str wepAmmo = getWepData(wepI, WEPDATA_AMMO);
+		GiveInventory(wepFlag, 1);
+		int player = PlayerNumber();
+		if (!isLMSgameMode()) {
+			ACS_NamedExecuteWithResult("XW Simple Clientside", CS_WEAPON_MESSAGE,
+				wepI, player, true); }
+		int slot = getWepInventory(player,0);		
+		// if the picked weapon was death dropped and was already owned, just refill its ammo
+		for (int i = 1; i < slot+1; i++) {
+			if (getWepInventory(player,i) == wepI) { GiveInventory(wepAmmo, 1792); 
+					displayAmmo(player); setResultValue(TRUE); terminate; }}
+		GiveInventory(weaponName, 1);
+		GiveInventory(wepAmmo, 1792);
+		setWepInventory(player,slot,wepI);
+		incrWepInventory(player);
+		setResultValue(TRUE);
+		terminate; }}
+		
+// reduces the duration dropped stuff last as the server grows 
+script "Drop Duration" (void) {
+	setResultValue(  min(   ((67*PlayerCount()*7)/5)/ServerMAXxw ,    67     )  );
+}
+		
+// His gift can be picked even if you own the weapon (refilling ammo)
+// 2dolater: make him truely give a random weapon you don't own (unless you own them all)
+// This Eddie first decides if a robot master weapon or a buster should be given
+script "XW Eddie" (void) {
+	int player = ACS_ExecuteWithResult(257, 0);
+	int wep; int i = 0; str toGive; 
+	
+	// give a buster
+	if (random(0,(MAX_1D-1) + MAX_BUSTERS -1) >= (MAX_1D-1)) {
+		wep = random(0,MAX_BUSTERS-1);
+		toGive = getWepData(wep, WEPDATA_BUSTER);
+		while (i < MAX_BUSTERS &&
+			(CheckActorInventory(player, toGive) ||  
+				(ThingCountName(toGive, 0) > 0))) {
+				wep++; wep %= MAX_BUSTERS; toGive = getWepData(wep, WEPDATA_BUSTER);
+				i++; }}
+	// give a weapon
+	else {
+		wep = random(0,MAX_1D-2);
+		while (i < (MAX_1D-1) &&
+			(CheckActorInventory(player, getWepData(wep, WEPDATA_FLAG)) ||
+				ThingCountName(getWepData(wep, WEPDATA_GIVER), 0) > 0)) {
+					wep++; wep %= (MAX_1D-1); 
+					i++; }
+		toGive = getWepData(wep, WEPDATA_DROP);
+	}
+	
+	
+	int tempTID = 6736+player-1000;
+	SpawnForced(toGive, GetActorX(0), GetActorY(0), GetActorZ(0), tempTID);
+	ThrustThing(GetActorAngle(0)>>8, 9, false, tempTID);
+	ThrustThingZ(tempTID, 10, 0, 0);
+	Thing_ChangeTID(tempTID, 0);}
+		
+
+
+
+
+// A script full of positivity so CustomInventories diligently success their pickup states
+script "yes" (void) {
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+//                    #7. Clientsided / Non-gameplay stuff			           //
+//////////////////////     //////////////////////     ////////////////////////
+			////////////////////////		////////////////////////	
+
+// color id & letter mapping, as defined in CVARs:messages
+// /!\ will conflict on mods bringing new colors for messages (white messages prob)
+
+str msgColors[22] = { 
+	"\ca", "\cb", "\cc", "\cd", "\ce", "\cf", "\cg", "\ch", "\ci", "\cj", "\ck", "\c[Untranslated]",
+	"\cm", "\cn", "\co", "\cp", "\cq", "\cr", "\cs", "\ct", "\cu", "\cv"
+};
+
+// If some kind of graphic/audio event can be done with 2 args only (the third being a case) this can be used
+script "XW Simple Clientside" (int type, int arg1, int arg2, int arg3) CLIENTSIDE {
+	switch(type) {	
+		case CS_WEAPON_MESSAGE:
+			// MM8BDM weapon pickup sound
+			PlaySound(0, "weapon/weaponup", CHAN_ITEM);
+			int serverPlayer = arg2 % ServerMAXxw;
+			if (!(ConsolePlayerNumber() == serverPlayer)) { terminate; }
+			str c;
+			if (arg3) { // vanilla weapon pickup message
+				c = msgColors[GetCVar("msg0color")]; } 
+			else { // ND weapon fusion message
+				arg2 = arg2 / ServerMAXxw;
+				switch(arg2) {
+					case 2: c = "\c[Xover2D]"; break;
+					case 3: c = "\c[Xover3D]"; break;
+					case 4: c = "\c[Xover4D]"; break;
+					case 5: c = "\c[Xover5D]"; break; }}
+			
+				Log(s:strParam(s:c, s:"Power up! ", 
+					s:getWepData(arg1, WEPDATA_TAGNAME), 
+					s:"!"));
+		break;
+		
+		case CS_C_TABLE_SMOKE:
+			GiveInventory("resetterSignal", 1);
+			if (arg1 < 2 || arg2) { terminate; }
+			delay(3);
+			int cooldown = 62;
+			for (int j = 2; j < arg1; j++) {
+				cooldown /= 3; }
+			//cooldown = max(cooldown, 2);
+			if (arg1 == 5) { ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_TABLE_ALARM); }
+			int speed;  int n = 0; int volume = 127 - ((107 * arg1)/5);
+			while (true) {
+				speed = (random(0,(4*arg1))-(2*arg1)) << 16;
+				LocalAmbientSound("CTSMOKE", volume);
+				ACS_NamedExecuteAlways("C.Table 1 Smoke", 0, 6020+n, speed, arg1);
+				n = (n+1) % 8;
+				for (int i = 0; i < cooldown; i++) {
+					delay(1); if (CheckInventory("resetterSignal")) { terminate; }}}		
+		break;
+		
+		
+		// shoots an electric spark through the crafting table.
+		// It returns and light up the C.Table if the inserted weapon does merge with the previous
+		// It also updates the fusion prediction cell's on valid fusion
+		case CS_ELECTRICITY:
+			if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+			//str icon = arg1;
+			int tier = (arg2 % 5);
+			bool condition = arg2/5;
+			LocalAmbientSound("CTXWSPRK", 127);
+			SetFont("TCSPARK");
+			SetHudSize(375, 384, TRUE); // 250 256
+			int y = random(-20,28) << 16;
+			for (i = 0; i < 7; i++) { // 117
+				HudMessage(s:"A"; HUDMSG_PLAIN, 6883, 0, 225.0+(20.0*i), 342.0+y, 0.05); 
+				delay(1);
+				if (CheckInventory("stopElectricity") || (ClassifyActor(0) & ACTOR_DEAD) ) { 
+					HudMessage(s:""; HUDMSG_PLAIN, 6883, 0, 0.0, 0, 0.01);  terminate; }}
+			
+			if (condition) {
+				//LocalAmbientSound("misc/basslaser", 127);
+				ACS_NamedExecuteAlways("XW Simple Clientside", 0, 
+					CS_FUSION_PREVIEW, tier, arg1);
+				
+				LocalAmbientSound("misc/wilybeam", 127);
+				ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_C_TABLE_SMOKE, tier+1);
+				//Log(s:"banish the shadows!!");
+				for (i = 6; i > 2; i--) {
+					HudMessage(s:"A"; HUDMSG_PLAIN, 6883, 0, 225.0+(20.0*i), 342.0+y, 0.05); 
+					delay(1);	
+					if (CheckInventory("stopElectricity")  || (ClassifyActor(0) & ACTOR_DEAD) ) { 
+						HudMessage(s:""; HUDMSG_PLAIN, 6883, 0, 0.0, 0, 0.01);  terminate; }}
+				LocalAmbientSound("XWFUSABL", 127);
+				HudMessage(s:""; HUDMSG_PLAIN, 6883, 0, 0.0, 0.0, 0.01); 
+				
+				// flash effect
+				SetHudSize(HUD_CT_MAIN_W, HUD_CT_MAIN_H, TRUE);
+				SetFont(strParam(s:"CRTABLE", d:tier)); 
+				HudMessage(s:"A"; HUDMSG_PLAIN, 6920, 0, 392.0, 312.0, 0); // 336 -71
+					
+				SetFont(strParam(s:"CTCOLOR", d:tier)); int alpha = 1.0;
+				for (i = 0; i < 4; i++) {
+					HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_ALPHA, 6720, 0, 520.0, 351.0, 0.03, alpha);
+					delay(2);	alpha-= 0.1;	}
+				terminate; }
+			HudMessage(s:""; HUDMSG_PLAIN, 6883, 0, 0.0, 0.0, 0.01); 
+		break;	
+		
+		case CS_C_TABLE_SEGFAULT:
+			if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+			SetHudSize(HUD_CT_MAIN_W, HUD_CT_MAIN_H, TRUE);
+			ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_C_TABLE_SMOKE, arg1, arg2);
+			SetFont(strParam(s:"TBGLTCH", d:random(1,6))); 	
+			LocalAmbientSound("misc/hitconfirm", 127);
+			HudMessage(s:"A"; HUDMSG_PLAIN, 6719, 0, 520.0, 347.0, 0.07);
+			
+			if (arg1 == 1 || arg2) {
+				SetFont("CRTABLE0"); 	
+				HudMessage(s:"A"; HUDMSG_PLAIN, 6920, 0, 520.0, 347.0, 0); }
+			else {
+					SetFont(strParam(s:"CRTABLE", d:arg1-1)); 	
+					HudMessage(s:"A"; HUDMSG_PLAIN, 6920, 0, 392.0, 312.0, 0); }
+		break;
+		
+		case CS_WEP_INSERTED:
+			if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+			LocalAmbientSound("misc/metalstab", 127);
+			SetHudSize(HUD_CT_CELL_W, HUD_CT_CELL_H, TRUE); 
+			SetFont("CTCELLCX");
+			for (i = 0 ; i < 3; i++) {
+				HudMessage(s:"A"; HUDMSG_PLAIN, 6040, 0, 294.0 + (26.0 * arg1), 243.0, 0.04);
+				delay(1);
+				if(CheckInventory("stopElectricity")) { terminate; }
+				delay(1);
+				if(CheckInventory("stopElectricity")) { terminate; }
+			}
+		
+		break;
+		
+		case CS_NOT_INGREDIENT:
+			if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+			LocalAmbientSound("misc/metalstab", 127);
+			ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_PRINT_TABLE_MESSAGE, 
+				"THIS WEAPON IS NOT AN INGREDIENT");
+			break;
+		
+		case CS_RECIPE_OWNED:
+			if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+			LocalAmbientSound("WEPOWNED", 127);
+			ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_PRINT_TABLE_MESSAGE, 
+				"YOU ALREADY OWN THIS RECIPE");
+		break;
+		
+		case CS_NOT_ENOUGH_SCREWS:
+			if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+			LocalAmbientSound("XWERROR", 127);
+			ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_PRINT_TABLE_MESSAGE, 
+				"YOU DON'T HAVE ENOUGH SCREWS");
+		break;
+		
+		case CS_TABLE_ALARM:
+			i = 45;
+			while (!CheckInventory("resetterSignal")) {
+				if (i >= 45) { LocalAmbientSound("CTDANGER", 127); i=0; }
+				delay(1); i++; }
+		break;
+					
+		case CS_FUSION_TIP:
+			if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+			TakeInventory("fusionTipReset",1);
+			GiveInventory("fusionTipReset",1);
+			delay(4);
+			for (i = 0; i < arg2*2; i++) {
+				if (CheckInventory("fusionTipReset")) { terminate; }
+				delay(4);
+			}
+			c = getWepData(arg1, WEPDATA_ICON);
+			SetFont(c); 
+			i = 14.0;
+			while (i >= 1.0) {
+				j = FixedDiv(1.0,i);
+				int x = ((FixedMul(j,247.0 + (21.0*arg2)) 
+							+ FixedMul(1.0-j,9.0)) >> 16) << 16; // floor						
+				y = ((FixedMul(j,225.0) + FixedMul(1.0-j,17.0)) >> 16) << 16;	
+						
+				SetHudSize((j*HUD_CT_WEP_W) >> 16, (j*HUD_CT_WEP_H) >> 16, TRUE);
+				
+				HudMessage(s:"A"; HUDMSG_ALPHA, 6081+arg2, CR_YELLOW,
+					x, y, 0.1, 0.4+((j*3)/5));
+				delay(1);
+				if (CheckInventory("fusionTipReset")) { terminate; }
+				i = FixedDiv(i,1.17); 
+			}
+			LocalAmbientSound(StrParam(s:"FUSNTIP", d:arg2+1), 127);
+			
+			while(true) {
+				SetHudSize(HUD_CT_WEP_W, HUD_CT_WEP_H, TRUE);
+				SetFont(c);
+				HudMessage(s:"A"; HUDMSG_FADEINOUT | HUDMSG_ALPHA, 6086+arg2, CR_YELLOW,
+					247.0 + (21.0*arg2), 225.0, 0.4, 0.3, 0.25, 0.7);
+			
+				SetHudSize(HUD_CT_CELL_W, HUD_CT_CELL_H, TRUE); 
+				SetFont(strParam(s:"CTCELL", d:arg2+1));
+				HudMessage(s:"A"; HUDMSG_FADEINOUT | HUDMSG_ALPHA, 6081+arg2, CR_YELLOW,
+					282.0 + (26.0*arg2), 231.0, 0.6, 0.2, 0.2, 0.8);
+					
+				for (i = 0; i < 8; i++) {
+					if (CheckInventory("fusionTipReset")) { terminate; }
+					delay(4);
+				}
+			}
+		break;
+		
+		case CS_FUSION_LIMIT: 
+			if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+			LocalAmbientSound("misc/ERPossess", 127);
+			ACS_NamedExecuteAlways("XW Simple Clientside", 0, CS_PRINT_TABLE_MESSAGE, 
+				"FUSION LIMIT REACHED, UNCOMBINE SOME WEAPONS");
+		break;
+		
+		case CS_FUSION_PREVIEW: //arg1 tier is [0,4] ; arg2 is wepIndex
+			if (arg1 < 0 || arg2 < 0) { 
+				HudMessage(s:" "; HUDMSG_PLAIN, 6100, 0, 0.0, 0.0, 0.01);
+				HudMessage(s:" "; HUDMSG_PLAIN, 6101, 0, 0.0, 0.0, 0.01);
+				HudMessage(s:" "; HUDMSG_PLAIN, 6102, 0, 0.0, 0.0, 0.01);
+				HudMessage(s:" "; HUDMSG_PLAIN, 6103, 0, 0.0, 0.0, 0.01);
+				HudMessage(s:" "; HUDMSG_PLAIN, 6104, 0, 0.0, 0.0, 0.01);
+				HudMessage(s:" "; HUDMSG_PLAIN, 6106, 0, 0.0, 0.0, 0.01);
+				HudMessage(s:" "; HUDMSG_PLAIN, 6107, 0, 0.0, 0.0, 0.01);	
+				terminate;
+			}
+			if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+			SetHudSize(HUD_CT_MAIN_W, HUD_CT_MAIN_H, TRUE);
+			SetFont("XWSTATCY"); 
+			HudMessage(s:"A"; HUDMSG_PLAIN, 6106, 0, 390.0, 332.0, 0);
+			if (!CheckInventory("noScrewsHud")) { SetFont("XWCTSACC"); HudMessage(s:"A"; HUDMSG_PLAIN, 6103, 0, 405.0, 308.0, 0); }
+			if (arg1 < 1) { HudMessage(s:" "; HUDMSG_PLAIN, 6104, 0, 0.0, 0, 0); }
+			else { 
+				SetFont(strParam(s:"XWPRVIX", d:arg1));
+				HudMessage(s:"A"; HUDMSG_PLAIN, 6104, 0, 383.0, 326.0 , 0); }
+			SetHudSize(229, 152, TRUE);
+			SetFont(getWepData(arg2, WEPDATA_ICON));
+			HudMessage(s:"A"; HUDMSG_PLAIN, 6107, 0, 159.2, 147.1, 0);
+		break;
+	
+		case CS_FUSION_COST:
+			if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+			int priceValue = CheckInventory("XW Recipe Price");		
+			int screwInventory = CheckInventory("XW Screw Count");
+			str color;
+			if (screwInventory < priceValue) { color = "XWSCRCT1"; }
+											else { color = "XWSCRCS1"; }
+			SetFont("CONFONT"); SetHudSize(520, 260, TRUE);
+			
+			//delay(15);
+			HudMessage(d:screwInventory; HUDMSG_PLAIN, 6100, 0, 324.4, 207.0, 0.0, 1.0);
+			if (priceValue) { 
+				arg1 = priceValue >= 1000;
+				if (arg1) { SetHudSize(600,260,TRUE); }
+				HudMessage(s:"/", d:priceValue; HUDMSG_PLAIN, 6101, 0, 340.6+(arg1*52.0), 215.0, 0.0, 1.0);
+				SetFont(color); 
+				SetHudSize(HUD_CT_MAIN_W, HUD_CT_MAIN_H, TRUE);
+				HudMessage(s:"A"; HUDMSG_PLAIN, 6102, 0, 384.0, 294.0, 0);
+			}
+			else { 
+				HudMessage(s:"/???"; HUDMSG_PLAIN, 6101, 0, 340.6, 215.0, 0.0, 1.0);
+				HudMessage(s:""; HUDMSG_PLAIN, 6102, 0, 0.0,0.0, 0.01, 1.0); 
+			}
+			break;
+		
+		case CS_PRINT_TABLE_MESSAGE:
+			int msgDuration = 0.5 + (StrLen(arg1) << 16)/32;
+			SetHudSize(576, 360, TRUE); 
+			SetFont("CONFONT");
+			// arg1
+			HudMessage(s:arg1; HUDMSG_FADEOUT, 6300, 0, 
+				460.0, 270.0, msgDuration, 0.1);
+		break;
+		
+		case CS_WEAPON_INFORMATION_WINDOW:
+			if(weaponInfoTableAnimation) { terminate; }
+			weaponInfoTableAnimation = true;
+			SetFont("XWHELPWP");
+			int windowPos = 3.0 * weaponInformationOn;
+			SetHudSize(432, 270, TRUE);
+			do {
+				HudMessage(s:"A"; HUDMSG_PLAIN, 5999, 0, 342.0, 214.0+(windowPos*40), 0);
+				delay(1);
+				windowPos += (1.0 + (-2.0 * weaponInformationOn));
+			} while(windowPos >= 0.0 && windowPos <= 3.0);
+			weaponInfoTableAnimation = false;
+		break;
+		
+	}
+}
+
+
+function void mapWeaponsToClient(int n) {
+	SetCVar("XW_MAPWEP_N", n);
+	for (int i = 0; i < n; i++) { 
+		SetCVar(strParam(s:"XW_MAPWEP_", d:i), map_weapons[i]); }}
+
+// updates the visual of weapons inserted in the table
+function void showTable(int player) {	
+	//HudMessage(; HUDMSG_PLAIN | HUDMSG_ALPHA, id, 0, x+state, y, 0.16, 1.0 - (i * 0.1)); 
+	str dataIcon;
+	for (int i = 0; i < TABLECAPACITY; i++) { 
+		int data = crafting_table[player][i];
+		if (data != -1) { 								// player + (ServerMAXxw*FALSE)
+			ACS_NamedExecuteAlways("Table Weapon Display", 0, player, data, i); }
+		else { ACS_NamedExecuteAlways("Table Weapon Display", 0, player+ServerMAXxw, -1, i); }}}
+																	//(ServerMAXxw*TRUE)
+// used for spec/DC clientsided event
+function void showEmptyTable(int player) {
+	for (int i = 0; i < TABLECAPACITY; i++) {
+		ACS_NamedExecuteAlways("Table Weapon Display", 0, player+ServerMAXxw, -1, i);
+															//(MZXSERVER*TRUE)
+	}
+}
+
+// one puff of smoke from the Crafting Table
+script "C.Table 1 Smoke" (int id, int force, int level) {
+	int x = random(-62, 62) << 16; int state = 0.0;
+	int y = (random(-27, 27)) << 16; SetHudSize(325, 333, TRUE);
+	int delayTime = max(1+(5-((level+1)/2)), 3);
+	for (int i = 0; i < 5; i++) {
+				SetFont(strParam(s:"CTSMOKE", d:i+1));
+				state += force;
+				HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_ALPHA, id, 0, 260.0+state+x, 296.0+y, 
+															0.16, 1.0 - (i * 0.1)); 
+				delay(delayTime); }
+	HudMessage(s:""; HUDMSG_PLAIN | HUDMSG_ALPHA, id, 0, x, y, 0.01, 0.8); }
+
+//dbleSoul start animation
+script "Fusion Animation 1" (int wepI, int animTime) CLIENTSIDE {
+	if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+	SetHudSize(HUD_CT_WEP_W, HUD_CT_WEP_H, TRUE);
+	SetFont(getWepData(wepI, WEPDATA_ICON));
+	int side = 1;
+	LocalAmbientSound("misc/gammadeath1", 127);
+		
+	for (int i = animTime; i > 0; i -= 2) {
+		delay(1);
+		if (ClassifyActor(0) & ACTOR_DEAD) { terminate; }
+		HudMessage(s:"A"; HUDMSG_PLAIN, 6056+1, CR_YELLOW, 
+			245.0 + (side * (i * 2.0)), 225.0, 0.2);
+		side *= -1; }
+	HudMessage(s:""; HUDMSG_PLAIN, 6056+1, CR_YELLOW, 245.0 + (side * (i * 2.0)), 225.0, 0.2);
+}
+
+//ygofm
+script "Fusion Animation 2" (int wep1, int wep2, int animTime) CLIENTSIDE {
+	if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+	SetHudSize(HUD_CT_WEP_W, HUD_CT_WEP_H, TRUE);
+	str wep1icon = getWepData(wep1, WEPDATA_ICON);
+	str wep2icon = getWepData(wep2, WEPDATA_ICON);
+	int x; int y;  int mod = 128; int modFixed = (mod << 16);
+	int step = 0; int alpha; bool alphaOK = false;
+	int temp;
+	int centerDist = 85.0; int curDist = centerDist; 
+	int reduceDist = FixedDiv(centerDist, (animTime << 16));
+	int soundCD = 6;   int minVolBzz = 30; int maxVolBzz = 127-minVolBzz;
+	for (int t = 0; t < animTime; t++) {
+		if (soundCD == 6) { LocalAmbientSound("misc/repairing", minVolBzz + 
+					(FixedMul((FixedDiv((t << 16),(animTime << 16))),(maxVolBzz << 16))) >> 16); soundCD = 0; 
+					 }
+					
+		else { soundCD++; }
+		step = (step + 1 + (1 * (t/3))) % mod;		
+		curDist -= reduceDist;
+		temp = FixedDiv((step << 16), modFixed);
+		x = (FixedMul(curDist, cos(temp)) - 65535) & 0xFFFF0000; // floors fixed points
+		y = (FixedMul(curDist, sin(temp)) - 65535) & 0xFFFF0000;			
+		if (!alphaOK) {
+			alpha = 0.2 + FixedDiv((t << 16), ((animTime/4) << 16));
+			if (!(alpha < (1 << 16))) { alphaOK = true; } }			
+		SetFont(wep1icon);
+		HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_ALPHA, 
+			6056+0, CR_YELLOW, 245.0 - x, 225.0 - y, 0.1, alpha);		
+		SetFont(wep2icon);
+		HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_ALPHA, 
+			6056+1, CR_YELLOW, 245.0 + x, 225.0 + y, 0.1, alpha);		
+		delay(1);//1+(i/8));
+		if (ClassifyActor(0) & ACTOR_DEAD) { terminate; }}}
+
+// Crafted weapon flashing
+script "Fusion Animation 3"  (int wepI, int animTime, int recipeQuest) CLIENTSIDE {	
+		if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+		if (recipeQuest == wepI) {
+			TakeInventory("fusionTipReset",1);
+			GiveInventory("fusionTipReset",1); }
+		SetHudSize(230, 142, TRUE);
+		SetFont("TCWEPSHA");
+		HudMessage(s:"A"; HUDMSG_FADEOUT, 6000, 0, 169.0, 147.0, 0.50, 0.2);		
+		SetFont(getWepData(wepI, WEPDATA_ICON));
+		HudMessage(s:"A"; HUDMSG_FADEOUT, 6001, 0, 169.0, 147.0, 1.0, 0.24);		
+		SetHudSize(HUD_CT_MAIN_W, HUD_CT_MAIN_H, TRUE);
+		SetFont("CTCOLORX"); 
+		HudMessage(s:"A"; HUDMSG_FADEOUT, 6151, 0, 520.0, 351.0 , 1.0, 0.2);
+		
+		SetFont(strParam(s:"CTCOLOR", d:getWepData(wepI, WEPDATA_TIER)-1));
+		for (int flashes = 0; flashes < animTime; flashes++) {
+			HudMessage(s:"A"; HUDMSG_PLAIN, 6150, 0, 520.0, 351.0 , 0.03);			
+			delay(2);
+			if (ClassifyActor(0) & ACTOR_DEAD) { terminate; }}}
+
+
+script "Table Weapon Display" (int playerANDempty, int wepI, int i) CLIENTSIDE {
+	int player = playerANDempty % ServerMAXxw;
+	if (player != ConsolePlayerNumber()) { terminate; }
+	bool empty = playerANDempty / ServerMAXxw;
+	SetHudSize(HUD_CT_CELL_W, HUD_CT_CELL_H, TRUE); 
+	if (!empty) {
+		str iconSprite = getWepData(wepI, WEPDATA_ICON);
+		SetFont(strParam(s:"CTCELL", d:i+1));
+		HudMessage(s:"A"; HUDMSG_PLAIN, 6051+i, CR_YELLOW, 282.0 + (26.0 * i), 231.0, 0);
+		SetFont(iconSprite);
+		SetHudSize(HUD_CT_WEP_W, HUD_CT_WEP_H, TRUE);
+		for (int j = 0; j < 3; j++) {
+			HudMessage(s:"A"; HUDMSG_PLAIN, 6056+i, 0, 247.0 + (21.0 * i), 225.0, 0.04);
+			delay(2);
+			if (CheckInventory("stopWeaponBlink") == i+1) { 
+				HudMessage(s:""; HUDMSG_PLAIN, 6051+i, 0, 0, 0, 0.01); 
+				terminate; }}
+		HudMessage(s:"A"; HUDMSG_PLAIN, 6056+i, 0, 247.0 + (21.0 * i), 225.0, 0); }
+	else {
+		HudMessage(s:" "; HUDMSG_PLAIN, 6051+i, CR_YELLOW, 0.0, 0.0, 0.01); 
+		HudMessage(s:" "; HUDMSG_PLAIN, 6056+i, CR_YELLOW, 0.0, 0.0, 0.01);
+		delay(6);
+		HudMessage(s:" "; HUDMSG_PLAIN, 6056+i, CR_YELLOW, 0.0, 0.0, 0.01);  }}
+
+
+
+script "Uncombine Screen" (int i1, int i2) CLIENTSIDE {
+	if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+	str i1icon = getWepData(i1, WEPDATA_ICON);
+	str i2icon = getWepData(i2, WEPDATA_ICON);
+	SetHudSize(240, 150, TRUE);
+	SetFont(i1icon); HudMessage(s:"A"; HUDMSG_FADEOUT, 6893, 0, 106.0, 79.0, 0.05, 0.27, 1.0);
+	SetFont(i2icon); HudMessage(s:"A"; HUDMSG_FADEOUT, 6894, 0, 133.0, 79.0, 0.05, 0.27, 1.0);
+}
+
+script "Uncombine Split" (int wep1, int wep2) CLIENTSIDE {
+		if (!(ConsolePlayerNumber() == PlayerNumber())) { terminate; }
+		int offset = 0.0; int alpha = 1.0; SetHudSize(240, 150, TRUE);
+		LocalAmbientSound("misc/junkmix", 127);
+		LocalAmbientSound("UNCRAFT", 127);
+		str wep1icon = getWepData(wep1, WEPDATA_ICON);
+		str wep2icon = getWepData(wep2, WEPDATA_ICON);
+		for (int i = 0; i < 15; i++) {
+			offset += 6.0; alpha -= 0.06;
+			SetFont(wep1icon); HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_ALPHA, 6893, 0, 106.0-offset, 79.0, 0.09, alpha);
+			SetFont(wep2icon); HudMessage(s:"A"; HUDMSG_PLAIN | HUDMSG_ALPHA, 6894, 0, 133.0+offset, 79.0, 0.09, alpha);
+			delay(1); if (CheckInventory("stopUncombine")) { terminate; } }}
+
+function void ctOperate (int wepI, int player, int silentANDtier) {
+	if (wepI != -1) { GiveInventory("XWOpenTable",1); }
+	else { TakeInventory("XWOpenTable", 1); }
+	ACS_NamedExecuteAlways("Crafting Table Operate", 0, wepI, player, silentANDtier); }
+	
+// silent and tier [0,1]x[0,4] are coded into [0,9]
+// if wepI is -1, tier is unused
+// this script is invoked by going through the above function
+script "Crafting Table Operate" (int wepI, int player, int silentANDtier) CLIENTSIDE {
+	if (player != ConsolePlayerNumber()) { terminate; }
+	bool silent = silentANDtier % 2;
+	int tier = (silentANDtier / 2);
+	str t = "CRTABLE0"; str c = "CTCELLS"; 
+	str staticc = "XWSTATCX"; str border = "XWPRVIEW";
+	int j;
+	// opening the table
+	if (wepI != -1) { j = 1; } 
+	// closing the table
+	else { j = 2 - (silent * 2);
+		GiveInventory("resetterSignal", 1);
+		HudMessage(s:""; HUDMSG_PLAIN, 6000, 0, 0, 0, 0.01);
+		HudMessage(s:""; HUDMSG_PLAIN, 6001, 0, 0, 0, 0.01);
+		HudMessage(s:""; HUDMSG_PLAIN, 6151, 0, 0, 0, 0.01); 
+		// hide the fusion weapon prediction
+		ACS_NamedExecuteAlways("XW Simple Clientside", 0, 
+				CS_FUSION_PREVIEW, -1, -1);			
+		}
+	
+	if (!silent) { LocalAmbientSound("menuOperate", 127); }
+	SetHudSize(HUD_CT_MAIN_W, HUD_CT_MAIN_H, TRUE);
+	for (int i = 0 + (silent * 2); i < 3; i++) {   
+		int yOverTime = (j * 20.0);
+		SetFont(t); HudMessage(s:"A"; HUDMSG_PLAIN, 6920, 0, 520.0, 407.0 - yOverTime, 0); //-27
+		SetFont(c); HudMessage(s:"A"; HUDMSG_PLAIN, 6880, 0, 440.0, 399.0 - yOverTime, 0);
+		SetFont(border); HudMessage(s:"A"; HUDMSG_PLAIN, 6105, 0, 405.0, 415.0 - yOverTime, 0);
+		SetFont(staticc); HudMessage(s:"A"; HUDMSG_PLAIN, 6106, 0, 390.0, 393.0 - yOverTime, 0);
+		if (wepI != -1) { j++	; } else { j--; }	
+		delay(1);
+		if ((CheckInventory("stopElectricity") && (wepI != -1)) || ClassifyActor(0) & ACTOR_DEAD) { 
+			SetFont(t); HudMessage(s:"A"; HUDMSG_PLAIN, 6920, 0, 520.0, 407.0, 0);
+			SetFont(c); HudMessage(s:"A"; HUDMSG_PLAIN, 6880, 0, 440.0, 415.0, 0); 
+			HudMessage(s:" "; HUDMSG_PLAIN, 6105, 0, 0.0, 0.0, 0.01);
+			HudMessage(s:" "; HUDMSG_PLAIN, 6106, 0, 0.0, 0.0, 0.01);
+			terminate; }}
+			
+	// display that inserted weapon in fusion prediction
+	if (wepI != -1) { 
+		ACS_NamedExecuteAlways("XW Simple Clientside", 0, 
+				CS_FUSION_PREVIEW, tier, wepI);			
+		}
+}
+
+// ND wep ammo bar draw
+function void displayAmmo(int player) {
+	int ammos = xover_ammos[player][0]; int ratio; int weaponIndex;
+	for (int i = 1; i < ammos+1; i++) { 
+		weaponIndex = xover_ammos[player][i];
+		ratio = CheckInventory(getWepData(weaponIndex, WEPDATA_AMMO))/64;
+		ACS_NamedExecuteWithResult("Display a XW Ammo", player,
+					weaponIndex,
+					ammos,
+					ratio + (i * 29)); }}
+													
+
+// args contains 3 values coded on [0,28]
+script "Display a XW Ammo" (int player, int weapon, int ammos, int args) CLIENTSIDE {
+		if (ConsolePlayerNumber() != player) { terminate; }
+		int ratio = args % 29; 
+		int i = (args / 29);
+		
+		str displayMode;
+		if (GetCVar("screenblocks") < 11) { displayMode = "V"; }
+		else { displayMode = "B"; }
+		
+		str colorBar; int idColor; int idBlack; int HUDx; int HUDy; int HUDBlack;
+		SetHudSize(320, 200, TRUE); 
+		//idBlack = 6734+i; idColor = 6734+i+ammos;
+		idBlack = 6734+(2*i); idColor = 6734+(2*i)+1;
+		
+		int firstSplitLeft = 1 + (ammos > 4); int firstSplitRight = 1 + (ammos > 5);
+		int secondSplitLeft = 1 + (ammos > 8); int secondSplitRight = 1 + (ammos > 9);
+		
+		
+		// vertical HUD bars
+		if (displayMode == "B") {		
+			// ammo bar to the left of the HP bar
+			if (i % 2 == 1) {
+				if(secondSplitLeft > 1) { 
+					colorBar = getWepData(weapon, WEPDATA_SMALLBAR); 
+					ratio = 14 + (ratio/2); }
+				else { 
+					colorBar = getWepData(weapon, WEPDATA_BIGBAR); }
+				HUDx = (20 - ((8/firstSplitLeft) * (((i % 8)-1)/2))) << 16;
+				HUDy = (36 + (secondSplitLeft-1)*(-14 + (28 * (i < 9)))) << 16; //(-14*ratio)/28 + 
+				HUDBlack = (36-ratio + (28*(i < 9))*(secondSplitLeft-1)) << 16; }
+			// ammo bar to the right of the HP bar
+			else { 
+				if(secondSplitRight > 1) { 
+					colorBar = getWepData(weapon, WEPDATA_SMALLBAR);
+					ratio = 14 + (ratio/2); }
+				else { 
+					colorBar = getWepData(weapon, WEPDATA_BIGBAR); }
+				HUDx = (36 + ((8/firstSplitRight) * (((i % 9)-1)/2))) << 16;
+				HUDy = (36 + (secondSplitRight-1)*(-14 + (28 * (i < 10)))) << 16; 
+				HUDBlack = (36-ratio + (28*(i < 10))*(secondSplitRight-1)) << 16; }
+		}
+		// horizontal HUD bars
+		else {
+			int pivotBar;
+			switch(ammos) { // hmmm... refactor into a formula?
+				case 2: pivotBar = 0; break;
+				case 3: case 4: pivotBar = 1; break;
+				case 5: case 6: pivotBar = 1; break;
+				default: pivotBar = 2; break;			
+			}
+			// ammo bar down portion
+			if (i % 2 == 1) {
+				if(secondSplitLeft > 1) { 
+					colorBar = getWepData(weapon, WEPDATA_SMALLBAR);
+					ratio = 14 + (ratio/2); }
+				else { colorBar = getWepData(weapon, WEPDATA_BIGBAR);; }
+				HUDx = (86 + (secondSplitLeft-1)*(-14 + (28 * (i > 8)))) << 16;
+				HUDy = (192 - (pivotBar*4) + ((8/firstSplitLeft)*(((i % 8)-1)/2))) << 16;
+				HUDBlack = (86+ratio - (28*(i < 9))*(secondSplitLeft-1)) << 16; }			
+			// ammo bar up portion
+			else { 
+				if(secondSplitRight > 1) { 
+					colorBar = getWepData(weapon, WEPDATA_SMALLBAR);
+					ratio = 14 + (ratio/2); }
+				else { colorBar = getWepData(weapon, WEPDATA_BIGBAR);; }
+				HUDx = (86 + (secondSplitRight-1)*(-14 + (28 * (i > 9)))) << 16;
+				HUDy = (184 - (pivotBar*4) - ((8/firstSplitRight)*(((i % 9)-1)/2))) << 16;
+				HUDBlack = (86+ratio - (28*(i < 10))*(secondSplitRight-1)) << 16; }
+		}
+		displayOneAmmoBar(displayMode, ratio, colorBar, idColor, idBlack, HUDx, HUDy, HUDBlack); }
+		
+
+						
+function void displayOneAmmoBar(str displayMode, int ratio, str colorBar, int idColor, int idBlack, int HUDx, int HUDy, int HUDBlack) {
+	// is vertical HUD ?
+	colorBar = StrParam(s:displayMode, s:colorBar); 
+	SetFont(colorBar);
+	HudMessage(s:"A"; HUDMSG_PLAIN, idColor, CR_YELLOW, HUDx, HUDy, 0);
+	if (!(ratio == 28)) {
+		SetFont(StrParam(s:displayMode, s:"AREMP", d:ratio));
+		// is vertical HUD ?
+		if (displayMode == "B") {  HudMessage(s:"A"; HUDMSG_PLAIN, idBlack, 0, HUDx, HUDBlack, 0); }
+		else { HudMessage(s:"A"; HUDMSG_PLAIN, idBlack, 0, HUDBlack, HUDy, 0); }
+	}
+	else { HudMessage(s:""; HUDMSG_PLAIN, idBlack, 0, 0, 0, 0); }}
+
+script "Ammo Hide" (int player, int calcPlayerNumber, int forceHide) {	
+	if (calcPlayerNumber) { player = PlayerNumber(); }
+	bool check = forceHide;
+	if (!check) { 
+		delay(1); // a tic to let the weapon switch when deselecting
+		check = (!(ClassifyActor(0) & ACTOR_DEAD)) && 
+			(!(getWepData(wep2index(GetWeapon()), WEPDATA_TIER) > 1)); }
+	if (check) {
+		ACS_NamedExecuteWithResult("Ammo Hide Clientside", 1, xover_ammos[player][0], player);
+		xover_ammos[player][0] = 0;		
+	}
+}
+
+script "Ammo Hide Clientside" (int lowerbound, int ammos, int player) CLIENTSIDE {
+	if (ConsolePlayerNumber() != player) { terminate; }
+	int upperBound;
+	// keep ammo on screen during death cam
+	// spectated/dc : for some reasons ammo number was forgotten
+	
+	if (ClassifyActor(0) & ACTOR_WORLD ) { upperBound = (16+1)*2; }
+	else { upperBound = (ammos+1)*2; }
+	for (int i = lowerbound*2; i < upperBound; i+=2) { //17
+		//log(s:"hiding ", d:6734+i, s:" and ", d:6735+i);
+		HudMessage(s:""; HUDMSG_PLAIN, 6734+i, CR_YELLOW, 0, 0, 0.01);
+		HudMessage(s:""; HUDMSG_PLAIN, 6735+i, CR_YELLOW, 0, 0, 0.01);}
+}
+
+script "Map Weapons Display" (void) CLIENTSIDE {
+	if (ConsolePlayerNumber() != PlayerNumber()) { terminate; }
+	int n = GetCVAR("XW_MAPWEP_N");
+	if (!n) { terminate; }
+	bool smallMode = (n > 32);
+	int menuSize = (n-1) / (8 + (smallMode * 4));
+	/*int GUImenuSize;
+	if (smallMode) { 
+	// multiply by 1.5, rounded to the next upper integer
+		GUImenuSize = menuSize*2; 
+		GUImenuSize = (((FixedDiv(GUImenuSize << 16, 3.0))+65536)&0xFFFF0000) >> 16; }
+	else { GUImenuSize = menuSize; }*/
+	
+	int sizeRatio = FixedDiv(2.0+(smallMode << 16), 2.0);
+	LocalAmbientSound("misc/cursorq", 127);
+	mapWepMenu(menuSize, smallMode, sizeRatio);
+	mapWeaponsDisplay(n, menuSize, smallMode, sizeRatio); 
+	while (GetPlayerInput(-1, INPUT_BUTTONS) & BT_USER3 ) { delay(1); }
+	mapWeaponsHide(n, menuSize); }
+	
+// uno grande cappucino purizu
+function void mapWepMenu(int menuSize, bool smallMode, int sizeRatio) {
+	SetHudSize(432, 320 + (160*smallMode), TRUE);
+	int menuBase = FixedMul(160.0, sizeRatio);
+	int upper = menuBase - 14.0 - (24.0 * menuSize);
+	int lower = menuBase + 14.0 + (24.0 * menuSize);
+	
+	SetFont("MAPWEP01");
+	HudMessage(s:"A"; HUDMSG_PLAIN, 6505, 0, 216.0, upper, 0);
+	SetFont("MAPWEP03");
+	HudMessage(s:"A"; HUDMSG_PLAIN, 6506, 0, 216.0, lower, 0);
+	
+	upper += 40.0;
+	SetFont("MAPWEP02");
+	for (int i = 0; i < menuSize; i++) {
+		HudMessage(s:"A"; HUDMSG_PLAIN, 6507+i, 0, 216.0, upper + (48.0*i), 0);	 }}	
+		
+function void mapWeaponsDisplay(int n, int menuSize, bool smallMode, int sizeRatio) {
+	str icon;
+	int iMax; int modulo;
+	//Log(s:" n = ", d:n, s:"  menusize = ", d:menuSize, s:" smallMode = ", d:smallMode);
+	if (smallMode) { modulo = 12; } else { modulo = 8; }	
+	
+	SetHudSize(320 + (160*smallMode), 200 + (100*smallMode), TRUE);	
+	
+	int toppest = FixedMul(100.0,sizeRatio);
+	//Log(s:"menu size ", d:menuSize, s: " smallMode ", d:smallMode*8);
+	toppest += 16.0 - (menuSize*13.0);
+	int leftestBase = FixedMul(160.0, sizeRatio) + 8.0;
+	int leftest;
+	int lastRowCount = (n-1) % modulo;
+	int maxRowOffset = (10.0 * (modulo-1));
+	for (int row = 0; row < menuSize+1; row++) {
+		// last row
+		if (row == menuSize) { leftest = leftestBase - (10.0 * lastRowCount); 
+								iMax = lastRowCount+1; }
+								
+		else { leftest = leftestBase - maxRowOffset; iMax = modulo; }
+		
+		for (int i = 0; i < iMax; i++) {
+			 // 8.0 iconsize + 2.0 icon distance
+			icon = getWepData(GetCvar(strParam(s:"XW_MAPWEP_", d:(row*modulo)+i)), WEPDATA_ICON);
+			SetFont(icon);
+			HudMessage(s:"A"; HUDMSG_FADEINOUT, 6314+(row*modulo)+i, CR_BROWN,
+					leftest+((i % modulo)*20.0), toppest+(row*26.0), 500.0, 0.12, 0.2);		}}}
+
+function void mapWeaponsHide(int n, int menuSize) {
+	for (int i = 0; i < menuSize+2; i++) { HudMessage(s:""; HUDMSG_PLAIN, 6505+i, CR_BROWN, 0.0, 0.0, 0.01); }
+	for (i = 0; i < n; i++) {	
+		HudMessage(s:""; HUDMSG_PLAIN, 6314+i, CR_BROWN,0.0, 0.0, 0.01);}}
+		
+function void displayFusionTip(int recipe, int count) {
+	lastFusionTip[PlayerNumber()] = recipe;
+	for (int i = 0; i < count; i++) {
+		ACS_NamedExecuteWithResult("XW Simple Clientside", CS_FUSION_TIP, 
+			tipsIngredients[i], i); }}
+		

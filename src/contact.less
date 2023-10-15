@@ -1,0 +1,45 @@
+#menu-contact .starmo-menu {
+    display:inline-block;
+    padding: 20px 10px;
+    #intro {
+        &:not(.show) { display:none; }
+        a {
+            position:relative;
+            margin: 0px 8px;
+            img { width: 48px }
+            .starmo-tooltip { bottom: 48px+4px; }
+        }
+        #sns { margin:12px; }
+    }
+    form {
+        display: none;
+        &.show { display:inline-block; }
+        padding: 20px 20px;
+
+        #contactFile:hover .withdraw { content:url("@{_svg}cross.svg"); }
+        textarea, #contactEmail {
+            @starmo-menu-border-s();
+            background-image: 
+                linear-gradient(rgba(0,0,0,.6), rgba(0,0,0,.6)),
+                url('/res/menu0.gif');
+            font-size: small;
+            outline:none;
+            padding:8px;
+        }
+        #contactEmail { width:60%; }
+        textarea { height: 256px; width: 100%; }
+        .mini {
+            max-width:min-content;
+            span {
+                position: relative;
+                bottom: 3px;
+            }
+            img { width: 20px; }
+        }
+        .formButton {        
+            display: block;
+            width: 160px;
+            margin: auto;
+        }
+    }
+}

@@ -1,0 +1,84 @@
+#menu-works {
+    @res: "@{_res}works/";
+
+    .works {
+        float: right;
+        right: 20%;
+        position: relative;
+        table {
+            border-spacing: 0px 16px;
+            border-collapse: separate;
+            margin: -8px 0px 4px 0px;
+            td {
+                @starmo-menu-border-s();
+                padding: 12px 8px;
+                &:first-child { border-image-width: 2px 0px 2px 2px; }
+                &:nth-child(2) { border-image-width: 2px 0px; }
+                &:last-child { border-image-width: 2px 2px 2px 0px; }
+            }
+            .selected td { border-image-source: url('/res/menuBorder1.png'); }
+            th {
+                border-image-width: 2px 2px;
+                padding: 8px;
+            }
+        }
+    }
+
+    .mugshot {
+        position: relative;
+        float: right;
+        margin-right: 250px;
+        right: 22%;
+        img:first-child, img:nth-child(2) {
+            position: absolute;
+            top: 26px; left: 27px;
+        }
+        img:nth-child(3) {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+        }
+    }
+
+    .details:extend(#menu-works .mugshot) {
+        &>span { display: none; }
+        h2 { margin: 2px auto; }
+        h5 { margin: 0px; padding: 0px; }
+        p { margin-block-start: 1em; }
+        a:not(.work-links a) { @starlight(); text-decoration:underline; }
+        
+        width: 240px;
+        min-height: 320px;
+        top: 215px;
+        margin-right: 0px;
+        .work-links {
+            @link-margin: 12px;
+            a {
+                position: relative;
+                display: inline-block;
+                .starmo-toolip { bottom: 44px; }
+                // Icon
+                & *:last-child { width: 24px; margin: 0px 0px @link-margin 0px; }
+            }
+
+            > span { position: absolute; bottom: 0px; }
+
+            // Time spent & Credits
+            > span:first-child {
+                left: @link-margin;
+                a:last-child {
+                    bottom: 20px; 
+                    left: 8px;
+                    [data-lang="workCredits"] {
+                        font-weight: bold;
+                        text-decoration: underline;
+                    }
+                }
+            }
+
+            // External links
+            > span:not(:first-child) { right: @link-margin; }
+        }
+    }
+}
+

@@ -1,0 +1,386 @@
+.starlight {
+  color: black;
+  filter: invert(52%) sepia(40%) saturate(1423%) hue-rotate(177deg) brightness(91%) contrast(87%);
+  transition: 0.16s;
+}
+.starlight:hover {
+  transition: 0.08s;
+  filter: invert(89%) sepia(31%) saturate(5339%) hue-rotate(180deg) brightness(109%) contrast(127%);
+}
+button,
+textarea,
+input,
+a,
+a:visited {
+  color: white;
+  font-family: 'MS Gothic', 'メイリオ', Meiryo, sans-serif;
+  font-size: medium;
+  text-decoration: none;
+}
+p {
+  margin-block: 0px 0px;
+}
+body {
+  color: white;
+  font-family: 'MS Gothic', 'メイリオ', Meiryo, sans-serif;
+  font-size: medium;
+  text-decoration: none;
+  text-align: center;
+  background-color: #000000;
+  background-image: url("/res//bg1.gif"), url("/res//bg2.png");
+  background-repeat: repeat-x, repeat-x;
+  background-position: center bottom, center top;
+  background-attachment: fixed;
+  background-size: 100% auto;
+  image-rendering: pixelated;
+}
+body main {
+  margin: 48px;
+}
+body header #i18n {
+  z-index: 2;
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  width: 104px;
+}
+body header #i18n img {
+  width: 24px;
+}
+body header #i18n ul {
+  display: none;
+}
+body header #i18n .show {
+  display: block;
+}
+body header nav {
+  position: fixed;
+  right: 0px;
+  top: 50%;
+  transform: translate(-30%, -50%);
+}
+body header nav span {
+  visibility: hidden;
+}
+body header nav a:not(h2 a) {
+  position: relative;
+  margin: 4px;
+}
+body header nav a:not(h2 a) .starmo-tooltip {
+  bottom: 48px;
+}
+body header nav a:not(h2 a) img {
+  width: 40px;
+}
+body header nav h2 a,
+body header nav h2 a:visited {
+  color: black;
+  filter: invert(52%) sepia(40%) saturate(1423%) hue-rotate(177deg) brightness(91%) contrast(87%);
+  transition: 0.16s;
+  font-size: x-large;
+  text-decoration: underline;
+}
+body header nav h2 a:hover,
+body header nav h2 a:visited:hover {
+  transition: 0.08s;
+  filter: invert(89%) sepia(31%) saturate(5339%) hue-rotate(180deg) brightness(109%) contrast(127%);
+}
+body header nav h2 a:hover:before {
+  content: ">>";
+  position: absolute;
+  left: -32px;
+}
+body header nav h2 a:hover:after {
+  content: "<<";
+  position: absolute;
+  right: -32px;
+}
+.starmo-menu {
+  background-image: url('/res/menu0.gif');
+  border-image: url('/res/menuBorder0.png') 27 / 6px / 4px stretch;
+  padding: 10px;
+}
+.starmo-menu .option {
+  border-image: url('/res/menuBorder0.png') 27 / 2px / 0px stretch;
+  transition: 0.2s;
+  padding: 12px;
+  background-image: url('/res/menu0.gif');
+}
+.starmo-menu .option:hover {
+  transition: 0.05s;
+  filter: brightness(200%);
+}
+.starmo-menu .option.selected {
+  background-image: url('/res/menu1.gif');
+  border-image-source: url('/res/menuBorder1.png');
+  filter: brightness(100%);
+  transition: 0.35s;
+}
+.starmo-button {
+  border-image: url('/res/menuBorder0.png') 27 / 6px / 4px stretch;
+  font-size: medium;
+  background-image: url('/res/button.png');
+  background-repeat: no-repeat;
+  background-size: cover;
+  width: 80px;
+  height: 44px;
+  border-radius: 6px;
+  box-shadow: 5px 5px 0px -2px rgba(2, 47, 64, 0.8);
+  border: none;
+  color: #ffffff;
+}
+.starmo-button:hover {
+  filter: brightness(145%);
+  transition: 0.15s;
+}
+.starmo-button.mini {
+  background-image: none;
+  border-image: url(/res/menuBorder0.png) 27 / 3px / 0px stretch;
+  background-color: #003878;
+  padding: 4px 10px;
+  box-shadow: none;
+  width: auto;
+  height: auto;
+}
+.starmo-tooltip {
+  color: white;
+  font-family: 'MS Gothic', 'メイリオ', Meiryo, sans-serif;
+  font-size: medium;
+  text-decoration: none;
+  border-image: url('/res/menuBorder0.png') 27 / 2px / 0px stretch;
+  border-image-width: 2px;
+  background-color: #003878;
+  filter: saturate(50%);
+  font-size: small;
+  visibility: hidden;
+  text-align: center;
+  padding: 8px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 0);
+  bottom: 44px;
+}
+.starmo-tooltip:not(big) {
+  max-width: 128px;
+}
+.starmo-tooltip.big {
+  width: 256px;
+}
+*:hover > .starmo-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+.icon {
+  color: black;
+  filter: invert(52%) sepia(40%) saturate(1423%) hue-rotate(177deg) brightness(91%) contrast(87%);
+  transition: 0.16s;
+}
+.icon:hover {
+  transition: 0.08s;
+  filter: invert(89%) sepia(31%) saturate(5339%) hue-rotate(180deg) brightness(109%) contrast(127%);
+}
+.icon.BUILD {
+  content: url("/res/svg/build.svg");
+}
+.icon.CODE {
+  content: url("/res/svg/code.svg");
+}
+.icon.DISCORD {
+  content: url("/res/svg/discord.svg");
+  padding-bottom: 4px;
+}
+.icon.DOWNLOAD {
+  content: url("/res/svg/download.svg");
+}
+.icon.GIT {
+  content: url("/res/svg/git.svg");
+}
+.icon.GITHUB {
+  content: url("/res/svg/github.svg");
+}
+.icon.I18N {
+  content: url("/res/svg/language.svg");
+}
+.icon.LINE {
+  content: url("/res/svg/line.svg");
+}
+.icon.LINK {
+  content: url("/res/svg/link.svg");
+}
+.icon.THREAD {
+  content: url("/res/svg/thread.svg");
+}
+.icon.VIDEO {
+  content: url("/res/svg/video.svg");
+}
+.icon.YOUTUBE {
+  content: url("/res/svg/youtube.svg");
+}
+#menu-works .works {
+  float: right;
+  right: 20%;
+  position: relative;
+}
+#menu-works .works table {
+  border-spacing: 0px 16px;
+  border-collapse: separate;
+  margin: -8px 0px 4px 0px;
+}
+#menu-works .works table td {
+  border-image: url('/res/menuBorder0.png') 27 / 2px / 0px stretch;
+  padding: 12px 8px;
+}
+#menu-works .works table td:first-child {
+  border-image-width: 2px 0px 2px 2px;
+}
+#menu-works .works table td:nth-child(2) {
+  border-image-width: 2px 0px;
+}
+#menu-works .works table td:last-child {
+  border-image-width: 2px 2px 2px 0px;
+}
+#menu-works .works table .selected td {
+  border-image-source: url('/res/menuBorder1.png');
+}
+#menu-works .works table th {
+  border-image-width: 2px 2px;
+  padding: 8px;
+}
+#menu-works .mugshot,
+#menu-works .details {
+  position: relative;
+  float: right;
+  margin-right: 250px;
+  right: 22%;
+}
+#menu-works .mugshot img:first-child,
+#menu-works .mugshot img:nth-child(2) {
+  position: absolute;
+  top: 26px;
+  left: 27px;
+}
+#menu-works .mugshot img:nth-child(3) {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+}
+#menu-works .details {
+  width: 240px;
+  min-height: 320px;
+  top: 215px;
+  margin-right: 0px;
+}
+#menu-works .details > span {
+  display: none;
+}
+#menu-works .details h2 {
+  margin: 2px auto;
+}
+#menu-works .details h5 {
+  margin: 0px;
+  padding: 0px;
+}
+#menu-works .details p {
+  margin-block-start: 1em;
+}
+#menu-works .details a:not(.work-links a) {
+  color: black;
+  filter: invert(52%) sepia(40%) saturate(1423%) hue-rotate(177deg) brightness(91%) contrast(87%);
+  transition: 0.16s;
+  text-decoration: underline;
+}
+#menu-works .details a:not(.work-links a):hover {
+  transition: 0.08s;
+  filter: invert(89%) sepia(31%) saturate(5339%) hue-rotate(180deg) brightness(109%) contrast(127%);
+}
+#menu-works .details .work-links a {
+  position: relative;
+  display: inline-block;
+}
+#menu-works .details .work-links a .starmo-toolip {
+  bottom: 44px;
+}
+#menu-works .details .work-links a *:last-child {
+  width: 24px;
+  margin: 0px 0px 12px 0px;
+}
+#menu-works .details .work-links > span {
+  position: absolute;
+  bottom: 0px;
+}
+#menu-works .details .work-links > span:first-child {
+  left: 12px;
+}
+#menu-works .details .work-links > span:first-child a:last-child {
+  bottom: 20px;
+  left: 8px;
+}
+#menu-works .details .work-links > span:first-child a:last-child [data-lang="workCredits"] {
+  font-weight: bold;
+  text-decoration: underline;
+}
+#menu-works .details .work-links > span:not(:first-child) {
+  right: 12px;
+}
+#menu-contact .starmo-menu {
+  display: inline-block;
+  padding: 20px 10px;
+}
+#menu-contact .starmo-menu #intro:not(.show) {
+  display: none;
+}
+#menu-contact .starmo-menu #intro a {
+  position: relative;
+  margin: 0px 8px;
+}
+#menu-contact .starmo-menu #intro a img {
+  width: 48px;
+}
+#menu-contact .starmo-menu #intro a .starmo-tooltip {
+  bottom: 52px;
+}
+#menu-contact .starmo-menu #intro #sns {
+  margin: 12px;
+}
+#menu-contact .starmo-menu form {
+  display: none;
+  padding: 20px 20px;
+}
+#menu-contact .starmo-menu form.show {
+  display: inline-block;
+}
+#menu-contact .starmo-menu form #contactFile:hover .withdraw {
+  content: url("/res/svg/cross.svg");
+}
+#menu-contact .starmo-menu form textarea,
+#menu-contact .starmo-menu form #contactEmail {
+  border-image: url('/res/menuBorder0.png') 27 / 2px / 0px stretch;
+  background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url('/res/menu0.gif');
+  font-size: small;
+  outline: none;
+  padding: 8px;
+}
+#menu-contact .starmo-menu form #contactEmail {
+  width: 60%;
+}
+#menu-contact .starmo-menu form textarea {
+  height: 256px;
+  width: 100%;
+}
+#menu-contact .starmo-menu form .mini {
+  max-width: min-content;
+}
+#menu-contact .starmo-menu form .mini span {
+  position: relative;
+  bottom: 3px;
+}
+#menu-contact .starmo-menu form .mini img {
+  width: 20px;
+}
+#menu-contact .starmo-menu form .formButton {
+  display: block;
+  width: 160px;
+  margin: auto;
+}
