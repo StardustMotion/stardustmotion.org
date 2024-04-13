@@ -1,8 +1,6 @@
-# starmo.zone
+Repository for https://www.stardustmotion.org/ website
 
-Repository for https://www.starmo.zone/ website
-
-## to build
+### to build
 
 Install [Typescript](https://www.typescriptlang.org/)/[Less](https://lesscss.org/), generate js/css, then run localhost
 
