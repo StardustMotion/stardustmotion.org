@@ -2,7 +2,7 @@ import i18nDict from "./i18nDict.js"
 
 const jpDict: i18nDict = {
     nav: {
-        resume: `<a href="res/jp1.9.3.pdf">履歴書</a>`,
+        resume: `<a href="res/cv_jp.pdf">履歴書</a>`,
         works: "作品",
         resources: "資源",
         contact: "お問い合わせ"
@@ -20,13 +20,13 @@ const jpDict: i18nDict = {
         workUnity: `<a target="_blank" href="https://unity.com/ja">Unity</a>`,
         workCredits: "謝意",
 
-        bur00Desc: `<a target="_blank" href="https://cutstuff.net/forum/index.php?topic=11976.0">マップジャム</a>の応募、<a target="_blank" href="https://cutstuff.net/mm8bdm/">「メガマン：8ビット・デスマッチ」</a>のプレイヤーｖｓ全員ステージです<br><br>甲板やエンジンルームや宙吊りエリア込みの大船です。<br><br>たまにはシップがプレイヤーの運動性を影響するの乱流に入ります<br>`,
+        bur00Desc: `<a target="_blank" href="https://mm8bdm.net/forum/thread/cutstuff-mapping-jam-9-banana-jamma-60">マップジャム</a>の応募、<a target="_blank" href="https://mm8bdm.net/">「メガマン：8ビット・デスマッチ」</a>のプレイヤーｖｓ全員ステージです<br><br>甲板やエンジンルームや宙吊りエリア込みの大船です。<br><br>たまにはシップがプレイヤーの運動性を影響するの乱流に入ります<br>`,
         bur00Build: "期間:<br>2ヶ月",
         bur00Credit: "ＢＧＭとテクスチャの基本素材(タイルセット)の由来は外部ソースです",
         bur00Video: "視聴する",
 
         xoverOngoing: "2014<br>(進行中)",
-        xoverDesc: `特殊武器を交える可能性を追加 <a target="_blank" href="https://cutstuff.net/mm8bdm/">「メガマン：8ビット・デスマッチ」</a>のＭＯＤです<br><br>交えた武器の方は強くなる、そして材料の元素と種類しだいで影響します。交えた武器も材料としてコンボ使えます。<br><br>新武器30以上実装です`,
+        xoverDesc: `特殊武器を交える可能性を追加 <a target="_blank" href="https://mm8bdm.net/">「メガマン：8ビット・デスマッチ」</a>のＭＯＤです<br><br>交えた武器の方は強くなる、そして材料の元素と種類しだいで影響します。交えた武器も材料としてコンボ使えます。<br><br>新武器30以上実装です`,
         xoverBuild: "期間:<br>v1 - 数週間<br>v2 - 6ヶ月",
         xoverCredit: "ＳＦＸサンプルと複数スプライトの由来は外部ソースです",
         xoverCode: "試料のコード",

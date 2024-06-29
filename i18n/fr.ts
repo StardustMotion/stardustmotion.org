@@ -2,7 +2,7 @@ import i18nDict from "./i18nDict.js"
 
 const frDict: i18nDict = {
     nav: {
-        resume: `<a href="res/en1.9.3.pdf">CV</a>`,
+        resume: `<a href="res/cv_en.pdf">CV</a>`,
         works: "productions",
         resources: "ressources",
         contact: "contact"
@@ -20,13 +20,13 @@ const frDict: i18nDict = {
         workUnity: `<a target="_blank" href="https://unity.com/fr">Unity</a>`,
         workCredits: "Avec",
 
-        bur00Desc: `Niveau de Match à mort pour <a target="_blank" href="https://cutstuff.net/mm8bdm/">Mega Man 8-bit Deathmatch</a> pour une <a target="_blank" href="https://cutstuff.net/forum/index.php?topic=11976.0">map jam</a><br><br>Un large vaisseau avec un pont, une section proche des rotors, et des plates-formes d'accès suspendues. Périodiquement, le vaisseau rentre dans une turbulence affectant dangeureusement le contrôle des joueurs<br>`,
+        bur00Desc: `Niveau de Match à mort pour <a target="_blank" href="https://mm8bdm.net/">Mega Man 8-bit Deathmatch</a> pour une <a target="_blank" href="https://mm8bdm.net/forum/thread/cutstuff-mapping-jam-9-banana-jamma-60">map jam</a><br><br>Un large vaisseau avec un pont, une section proche des rotors, et des plates-formes d'accès suspendues. Périodiquement, le vaisseau rentre dans une turbulence affectant dangeureusement le contrôle des joueurs<br>`,
         bur00Build: "Temps passé:<br>2 mois",
         bur00Credit: "Tuiles pour base de texture et musique issues de sources externes",
         bur00Video: "Visionner",
 
         xoverOngoing: "2014<br>(en cours)",
-        xoverDesc: `Modification pour <a target="_blank" href="https://cutstuff.net/mm8bdm/">Mega Man 8-bit Deathmatch</a> qui ajoute un système de fusion d'armes<br><br>Les armes fusionées sont plus puissantes et définies par le mode de fonctionnement et élément de leurs ingrédients. L'arme fusionée est aussi un ingrédient enchaînable vers une autre fusion.<br><br>30+ nouvelles armes codées`,
+        xoverDesc: `Modification pour <a target="_blank" href="https://mm8bdm.net/">Mega Man 8-bit Deathmatch</a> qui ajoute un système de fusion d'armes<br><br>Les armes fusionées sont plus puissantes et définies par le mode de fonctionnement et élément de leurs ingrédients. L'arme fusionée est aussi un ingrédient enchaînable vers une autre fusion.<br><br>30+ nouvelles armes codées`,
         xoverBuild: "Temps passé:<br>v1 - quelques semaines<br>v2 - 6 mois",
         xoverCredit: "Échantillons de sons et la référence pour certains sprites issus de sources externe",
         xoverCode: "Aperçu du code",
