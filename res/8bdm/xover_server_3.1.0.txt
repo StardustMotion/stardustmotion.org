@@ -1,0 +1,1314 @@
+//////////////////////////////////////////////////
+// .dP"Y8 888888 88""Yb Yb    dP 888888 88""Yb  //
+// `Ybo." 88__   88__dP  Yb  dP  88__   88__dP  //
+// o.`Y8b 88""   88"Yb    YbdP   88""   88"Yb   //
+// 8bodP' 888888 88  Yb    YP    888888 88  Yb  //
+//////////////////////////////////////////////////
+
+
+// ----------------------------------------------------------------------------------------------------------------- //
+
+// API
+int __xoverWeaponCount = 0;
+script "Xover API" (int type, int arg1, int arg2, int arg3) {
+    switch(type) {
+        case 0: // Register keyword
+            if (arg2) // Secret keyword
+                arg2--;
+            else {
+                arg2 = GetCvarString("_xw_string0");
+                arg3 = GetCvarString("_xw_string1");
+            }
+            if (keywordCount >= XW_MAX_KEYWORDS)
+                log(s:"\ciThe ", d:XW_MAX_KEYWORDS, s:" \cgkeyword\ci limit is exceeded, can't define \cg", d:arg1, s:" \c-(\cg", s:arg2, s:"\ck)");
+            else {
+                __keywords[keywordCount][0] = arg1;
+                __keywords[keywordCount][1] = arg2;
+                __keywords[keywordCount][2] = arg3;
+                keywordCount++;
+            }
+        break;
+
+        case 1:  // Register Xover Weapon
+            type = GetCvarString("_xw_string0");
+            int wep = GetCvarString("_xw_string1");
+            int slot = GetCvar("_xw_int0");
+            int icon = GetCvarString("_xw_string2");
+            int desc = GetCvarString("_xw_string3");
+            if (timer()<2) 
+                delay(2);
+            if ((arg1<2 || arg1>5))
+                log(s:"\ci", l:type, s:"\ck's tier should be either \ci2, 3, 4 or 5\ck, ignoring this xover weapon");
+            arg1-=2;
+            if (getXoverWeaponCount(arg1) >= XW_MAX_FUSIONS)
+                log(s:"\ciThe ", d:XW_MAX_FUSIONS, s:" \cgxover weapon (tier ", d:arg1+2, s:") \cilimit is exceeded, can't define \cg", l:type);
+            else {
+                int kw[2] = { findKeywordById(arg2), findKeywordById(arg3) };
+                for (int i = 0; i < 2; i++)
+                    if (kw[i]==-1) {
+                        log(s:"\ck/!/ \ctKeyword \ciid = ", d:(i ? arg3 : arg2), s:"\ck for fusion \ci", l:type, s:" \cknot defined, this xover weapon will be ignored");
+                        terminate;
+                    }
+                i = (arg1*XW_MAX_FUSIONS) + get8bFlagVal(__xoverWeaponCount,arg1);
+                __xoverWeaponCount += (1<<(8*arg1));
+                SetCVar(CVAR_XOVERWEP_SIZE, __xoverWeaponCount);
+                __weapons[i][0] = type;
+                __weapons[i][1] = wep;
+                __weapons[i][2] = slot;
+                __weapons[i][3] = icon;
+
+                if (kw[0] > kw[1]) { 
+                    swap(kw[0],kw[1]); kw[0]=swap1; kw[1]=swap2; 
+                }
+                __weapons[i][4] = desc;
+                __weapons[i][5] = kw[0];
+                __weapons[i][6] = kw[1];
+            }
+        break;
+
+        case 2: // Register ingredient
+            type = GetCvarString("_xw_string0");
+            int kws[XW_MAX_KEYWORD_PER_WEP] = { arg1, arg2, arg3, GetCvar("_xw_int0"), GetCvar("_xw_int1"), GetCvar("_xw_int2"), GetCvar("_xw_int3"), GetCvar("_xw_int4") };
+            while (timer()<3) delay(1);
+            //if (ingredientCount >= XW_MAX_INGREDIENTS) // taken care by DefineWeapon / DefineXoverWeapon
+            wep = findXoverByActor(type,false); // runtime Id
+			// if (wep==-1) {
+            //     log(s:"\ck/!/ \cvIngredient \ci", s:type, s:"\ck was not defined with \cvDefineWeapon\ck or \cvDefineXoverWeapon\ck, can't add its \ctkeywords\c-");
+            //     terminate;
+            // }				
+			if (getTier(wep)==XW_MAX_TIER+1)
+				log(s:"\ck/!/ Can't define \ci", s:type, s:"\ck as \cvingredient\ck because it's a highest tier (", d:XW_MAX_TIER+1, s:") Xover Weapon. Ignoring");
+			else {
+				arg1 = 0, arg2 = 0;
+                while(__ingredients[wep][arg2] && (arg2<XW_MAX_KEYWORD_PER_WEP))
+                    arg2++;
+				while (kws[arg1]) {
+                    if (arg2==XW_MAX_KEYWORD_PER_WEP) {
+                        arg3 = "";
+                        for (; (arg1 < arg2) && kws[arg1]; arg1++)
+                            arg3 = strparam(s:arg3, d:kws[arg1], s:" ");
+                        log(s:"\ck/!/ \ciWeapon \c-", s:type, s:" \ckreached the \cg", d:XW_MAX_KEYWORD_PER_WEP, s:" \ctkeyword\ck limit. \ctKeywords\ck id ", s:arg3, s:"\ckcould not be added.");
+                        break;                        
+                    }
+					arg3 = findKeywordById(kws[arg1]);
+					if (arg3==-1)
+						log(s:"\ck/!/ \ctKeyword \ciid = ", d:kws[arg1], s:"\ck for weapon \ci", s:type, s:" \cknot defined, it will not be added");
+					else {
+						__ingredients[wep][arg2] = arg3+1; 
+                        arg2++;
+					}
+					arg1++;
+				}
+			}
+        break;
+    }
+}
+
+// ----------------------------------------------------------------------------------------------------------------- //
+
+
+
+
+
+
+
+// ----------------------------------------------------------------------------------------------------------------- //
+
+// Events
+
+script "XW OPEN" OPEN {
+    int mode = GetCurrentGameMode();
+    displayMapWeapons = GetCvar(CVAR_DISPLAY_MAP_WEAPONS);
+    isPvM = !StrICmp(mode,"cooperative")|!StrICmp(mode,"survival")|!StrICmp(mode,"invasion");
+    setresultvalue(true);
+    isLegacyZandronum = (GetEventResult() != 1);
+    isTeamGameRound = isPvM|!StrICmp(mode,"teamplay")|!StrICmp(mode,"teamlms")|!StrICmp(mode,"teampossession")|!StrICmp(mode,"ctf")|!StrICmp(mode,"oneflagctf");
+    AddSpawnFunc(DTADD_SFT_WEP, "On XW Wep Spawn");
+    apropDefinitions();
+    delay(5);    
+    if (GetCVar(CVAR_FIRST_START))
+        onFirstStart();
+
+    int mapWeps = 0;
+    
+    // Parse runtime data to CVARs for clientside access
+    // Base (1D) weapons
+    int strBuilder = "", strBuilder2 = "", cvarI = 0; 
+    for (int i = 0; i < MAX_WEAPONS_GLOBAL; i++) {
+        int name = getWeaponIcon(i), padded = strPadding(name,8);
+        if (dumpIconBatch(strBuilder,padded,cvarI)) { cvarI++; strBuilder = padded; }
+        else strBuilder = strparam(s:strBuilder, s:padded);
+
+        if (mapWeps<MAP_WEPCOUNT)
+            if (ThingCountName(getWeaponActor(i),0)) {
+                mapWeps++;
+                strBuilder2 = strParam(s:strBuilder2, s:padded);
+            }
+    }
+    SetCVarString(CVAR_MAP_WEAPONS,strBuilder2); 
+
+    // Xover Weapons icons
+    for (int tier = 0; tier < XW_MAX_TIER; tier++) {
+        for (i = 0; i < getXoverWeaponCount(tier); i++) {
+            name = strPadding(__weapons[tier*XW_MAX_FUSIONS+i][3],8);
+            if (dumpIconBatch(strBuilder,name,cvarI)) { cvarI++; strBuilder = name; }
+            else strBuilder = strparam(s:strBuilder, s:name);
+        }
+    }
+    SetCVar(CVAR_MAX_WEAPONS,MAX_WEAPONS_GLOBAL);
+    SetCVarString(strParam(s:CVAR_WEP_ICONS,d:cvarI), strBuilder);
+
+    // settings refresher
+    while (true) {
+        unlockPlayerRate = GetCvar(CVAR_UNLOCK_PLAYER);
+        unlockMonsterRate = GetCvar(CVAR_UNLOCK_MONSTER);
+        autoUnlockRate = GetCvar(CVAR_AUTOUNLOCK)&0x7FFFFFFF;
+        delay(105);
+    }
+}
+
+function bool dumpIconBatch(str string, str icon, int i) {    
+    if (strLen(string)==XW_CVAR_STR_SIZE) {
+        int cvarName = strParam(s:CVAR_WEP_ICONS,d:i);
+        SetCVarString(cvarName, string);
+        return true;
+    }
+    return false;
+}
+
+function void onFirstStart(void) {
+    // Parse constant runtime data to a CVAR for clientside access
+
+    // keyword label and icons
+    str strBuilder = "", strBuilder2 = "";
+    for (int i = 0; i < keywordCount; i++) {
+        str name = __keywords[i][1];
+        if (name) {
+            strBuilder = strParam(s:strBuilder, s:strPadding(name,4));
+            strBuilder2 = strParam(s:strBuilder2, s:strPadding(__keywords[i][2],8));
+        }
+        else {
+            strBuilder = strParam(s:strBuilder, s:SECRET_KEYWORD_LABEL);
+            strBuilder2 = strParam(s:strBuilder2, s:"XWAO[0  ");
+        }
+    }
+    SetCVarString(CVAR_KW_LABELS,strBuilder);
+    SetCVarString(CVAR_KW_ICONS,strBuilder2);
+
+    SetCVar(CVAR_FIRST_START,false);
+}
+
+int pickupPlayer = -1;
+script "On XW Wep Spawn" (void) {
+	// dropped weapons don't spawn with SPECIAL
+	while(!CheckFlag(0,"SPECIAL")) delay(1);	
+	int tid = ActivatorTID(), tmp1 = UniqueTID(), tmp2 = UniqueTID();
+	Thing_ChangeTID(0, tmp1);
+	SpawnSpotFacingForced("XW Weapon Pickup", tmp1, tmp2);
+	SetActivator(tmp2);
+	SetPointer(AAPTR_TARGET,tmp1);
+	Thing_ChangeTID(tmp2, 0);
+	SetActivator(tmp1);
+	Thing_ChangeTID(0, tid);
+    if (!(timer()>>3) && displayMapWeapons)
+        SpawnForced(strparam(s:getactorclass(0), s:"XWMap"),getactorx(0),getactory(0),getactorz(0),0);
+}
+
+script "XW ENTER" ENTER {
+    delay(1); onSpawn(PlayerNumber(),false);
+}
+
+script "XW RESPAWN" RESPAWN { 
+    delay(1); onSpawn(PlayerNumber(),true);
+}
+
+function void onSpawn(int player, bool isRespawn) {
+    if (isRespawn) {
+        if (GetCvar(CVAR_RESTORE_INGREDIENTS)) giveIngredients();
+        else clearFusionEvents(player);
+        if (isPvM) {
+            GiveInventory(PVM_FLAG,1);
+            coopResetStatus(player);
+        }
+    }        
+    else if (isPvM && CheckInventory(PVM_FLAG))
+        coopResetStatus(player);
+    else {
+        clearFusionEvents(player);
+        clearFusionQueue();
+        clearAmmoDecimal(player); 
+        if (isPvM) GiveInventory(PVM_FLAG,1);   
+    } 
+    clearFusionTable(player);
+    ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_TABLE, false);
+    if (isBot())
+        ACS_NamedExecuteWithResult("XW ENGINE", SYS_BOT);
+    ACS_NamedExecuteWithResult("XW ENGINE", SYS_PLAYER_THREAD);
+}
+
+// Return every unlocked fusion's ingredients and modify fusion event state accordingly
+function void giveIngredients(void) {
+    int player = PlayerNumber();
+    int lastSlot = 0;
+    bool kick = false;
+    bool keepWeapons = isPvM && !GetCvar("SV_Coop_LoseInventory") && !GetCvar("SV_Coop_LoseWeapons");
+    for (int i = 0; i < getFusionEventCount(player); i++) {
+        int e = getFusionEvent(player,i);
+        if (!isFusionEventUnlocked(player,e)) {
+            if (keepWeapons) {
+                int ing1 = getFusionEventIngredient(player,e,0);
+                int ing2 = getFusionEventIngredient(player,e,1);
+                if (!isFusion(ing1)) restoreWeapon(ing1);
+                if (!isFusion(ing2)) restoreWeapon(ing2);
+            }
+            deleteFusionEvent(player,e); // queued
+        }
+        else {
+            if (!isFusionEventDisabled(player,e) && !keepWeapons) { // a root fusion -- return its ingredients
+                for (int ingredient = 0 ; ingredient < 2; ingredient++) {
+                    int id = getFusionEventIngredient(player,e,ingredient);
+                    if (!isFusion(id)) {
+                        SpawnForced(getWeaponActor(id), GetActorX(0), GetActorY(0), GetActorZ(0),0,0);
+                        kick = true;
+                    }
+                    else {
+                        messageClient(MSG_GET_EQUIPPED_MSG, strparam(d:getXoverSlot(id), s:getXoverTag(id)), player);
+                        PlaySound(0,"XWQUUNLK",CHAN_7);
+                        GiveInventory(getXoverActor(id),1);
+                        int tmp = findFusionEvent(player,id); // guaranteed to be an index before i
+                        unlockFusionEvent(player,tmp);
+                        enableFusionEvent(player,tmp);
+                        for (tmp = 0; tmp < findBaseIngredients(player,id,0); tmp++) {
+                            str ammoName = getWeaponAmmoType(tmpData[tmp]);
+                            GiveInventory(ammoName, GetAmmoCapacity(ammoName));
+                        }
+                    }
+                }
+                deleteFusionEvent(player,e);
+            }
+            else {
+                moveFusionEvent(player,e,getFusionEvent(player,lastSlot));
+                lastSlot++;
+            }
+        }
+    }
+    if (kick) SetActorVelocity(0,0.1,0.1,0,true,false); // immobile player won't collect pickups
+    setFusionEventCount(player,lastSlot);
+}
+
+function int findBaseIngredients(int player, int fusion, int index) {
+    if (!isFusion(fusion)) {
+        tmpData[index] = fusion;
+        return index+1;
+    }
+    int e = findFusionEvent(player,fusion);
+    if (e==-1)
+        return index;
+    index = findBaseIngredients(player,getFusionEventIngredient(player,e,0),index);
+    index = findBaseIngredients(player,getFusionEventIngredient(player,e,1),index);
+    return index;
+}
+
+script "XW EVENT" (int type, int arg1, int arg2) EVENT {
+    switch(type) {
+		case GAMEEVENT_ACTOR_DAMAGED:
+            arg1 = damageStep(isLegacyZandronum ? arg1 : GetEventResult(), arg2);
+            setResultValue(arg1);
+
+            type = ClassifyActor(0);
+            forgeFusionCheck(arg1, type);
+
+            delay(1);
+            if (type & ACTOR_MONSTER) {
+                SetActivator(0,AAPTR_DAMAGE_TARGET);
+                if (isGone(0)) onMonsterDeath(arg2);                
+            }
+        break;
+    }
+}
+script "XW INPUT" (int button, int newState) NET {
+    button &= 0x3;
+    if (!newState) {
+        inputStateOff(button);
+        terminate;
+    }
+    else
+        inputStateOn(button);
+    if (CheckInventory("XW Input CD") | state(STATE_BTN_B) | state(STATE_BTN_A) | (isGone(0)&&(button!=2)))
+        terminate;
+    GiveInventory("XW Input CD",1);
+    int player = PlayerNumber(),
+        hold = 0, holdMax = (GetUserCVar(player,CVAR_HOLD)*35)>>16, prevInput, var, skip = false;
+        
+    bool actionChecked = false;
+    switch(button) {
+        case 0: // APPEND / A
+            stateOn(STATE_BTN_A);
+            do {
+                prevInput = (inputState(XW_ADD_KEY)<<XW_ADD_KEY) | (inputState(XW_REMOVE_KEY)<<XW_REMOVE_KEY);
+                delay(1);
+                if (isGone(0)) {
+                    stateOff(STATE_IS_SWAPING);
+                    skip = true;
+                    break;
+                }
+                hold++;
+                int status = fusionSwap(player,var,prevInput);
+                if (status)  {
+                    skip = true;
+                    if (status>>1) break;
+                }
+                else if (inputState(XW_REMOVE_KEY) && !actionChecked) { // check for fusion swap
+                    actionChecked = true;
+                    var = initSwap(player);
+                    if (var) 
+                        delay(4);
+                }
+                else if (hold>holdMax) { // polymerization check
+                    if (!state(STATE_IS_COMBINING)) {
+                        ACS_NamedExecuteWithResult("XW ENGINE",SYS_POLYMERIZATION);
+                        delay(1);
+                    }
+                    skip = true;
+                    break;
+                }
+            } while(inputState(XW_ADD_KEY) | state(STATE_IS_SWAPING));
+            if (!skip && !state(STATE_CRITICAL_SECTION))
+                appendWeapon();
+            stateOff(STATE_BTN_A);
+        break;
+
+        case 1: // REMOVE / B
+            stateOn(STATE_BTN_B); 
+            do { 
+                delay(1);
+                if (isGone(0))
+                    break;
+                status = uncombineCheck(player, var);
+                if (status) {
+                    if (status>>1) {
+                        var = getXoverActor(var);
+                        do delay(1); while (CheckInventory(var) && !isGone(0));                        
+                        skip = true;
+                    }
+                    break;
+                }
+                else if (!actionChecked) {
+                    actionChecked = true;
+                    var = findXoverByActor(GetWeapon(),false);
+                    if (isFusion(var)) {
+                        stateOn(STATE_IS_UNCOMBINING);
+                        stateOff(STATE_UNCOMBINED);
+                        hold = findFusionEvent(player,var);
+                        ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_UNCOMBINE_SCREEN,
+                            getFusionEventIngredient(player,hold,0),
+                            getFusionEventIngredient(player,hold,1));
+                    }
+                }
+            } while(inputState(XW_REMOVE_KEY));
+            if (!skip && !CheckInventory("XW Pop cooldown"))
+                popWeapon(false,true);
+            stateOff(STATE_IS_UNCOMBINING);
+            stateOff(STATE_BTN_B);
+        break;
+
+        case 2: // INFO / C
+            if (state(STATE_WEP_HELP)) {
+                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_FUSION_HELP, -1);
+                stateOff(STATE_WEP_HELP);
+                terminate;
+            }
+            else {
+                if (PlayerIsSpectator(player)) hold = holdMax;
+                do {
+                    delay(1);
+                    hold++;
+                    if (hold>holdMax) {
+                        ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_MAP_WEPS);
+                        terminate;
+                    }
+                } while (inputState(XW_INFO_KEY));
+                if (state(STATE_WEP_HELP)) {
+                    stateOff(STATE_WEP_HELP);
+                    terminate;
+                }
+                else if (!isGone(0)) {
+                    skip = getweapon();
+                    var = findXoverByActor(skip,true);
+                    if (var != -1) {
+                        stateOn(STATE_WEP_HELP);
+                        ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_FUSION_HELP, var);
+                        messageClient(MSG_FUSION_HELP_DESCRIPTION,getXoverDesc(var),PlayerNumber());
+                        do delay(1);
+                            while (!isGone(0) && state(STATE_WEP_HELP) && !StrICmp(skip,getweapon()));
+                        ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_FUSION_HELP, -1);
+                        stateOff(STATE_WEP_HELP);
+                    }
+                    else {
+                        printTableMessage("NOT A XOVER WEAPON");
+                        ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_SFX, SYS_SFX_DENIED);
+                    }
+                }
+            }
+        break;
+    }
+}
+
+function int initSwap(int player) {    
+    if (hasSwaps(player)) {
+        int slot = fusionBufferSlot[player]-1;
+        int ing1 = getBuffer(player,slot,0), ing2 = getBuffer(player,slot,1);
+        int fusionList = getFusions(ing1,ing2);
+        int fusionListCopy = fusionList, keyFlag = 0;
+        slot = 0;
+        while (fusionListCopy) {
+            fusionListCopy>>=8;
+            keyFlag |= (BT_MOVERIGHT << ((FUSION_SWAP>>(8*slot))&0xFF));
+            slot++;
+        }
+        if (keyFlag&BT_FORWARD) { // at least 1 swap available
+            __SetInventory("XW Fusion Swap Pick",getFusionSelect(player,fusionBufferSlot[player]-1));
+            stateOn(STATE_IS_SWAPING);
+            ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_FUSION_SWAP, fusionList, getFusionTier(ing1,ing2));
+            return keyFlag;
+        }
+    }
+    return false;
+}
+
+function bool fusionSwap(int player, int keyFlag, int prevInput) {
+    if (state(STATE_IS_SWAPING)) {
+        if (fusionBufferSlot[player]<2 || 
+            (inputState(XW_ADD_KEY) && !(prevInput&XW_ADD_KEY)) ||
+            (inputState(XW_REMOVE_KEY) && !(prevInput&XW_REMOVE_KEY))) {
+            stateOff(STATE_IS_SWAPING);
+            return true<<1;
+        }
+        else {
+            int input = GetPlayerInput(-1, INPUT_BUTTONS) & keyFlag;
+            prevInput = GetPlayerInput(-1, INPUT_OLDBUTTONS) & keyFlag;
+            if (prevInput==input) return true;
+            if (input&BT_FORWARD) int pick = 1;
+            else if (input&BT_MOVELEFT) pick = 2;
+            else if (input&BT_BACK) pick = 0;
+            else if (input&BT_MOVERIGHT) pick = 3;
+            else return true;
+
+            int slot = fusionBufferSlot[player]-1;
+            prevInput = getFusionSelect(player,slot);
+            setFusionSelect(player, slot, pick);
+            setBufferOwned(player,-1);
+            if (state(STATE_IS_COMBINING) && isBufferOwned()) {
+                setFusionSelect(player, slot, prevInput);
+                setBufferOwned(player,false);
+                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_SFX, SYS_SFX_DENIED);
+                return true;
+            }
+            __SetInventory("XW Fusion Swap Pick",pick);
+            input = getBufferedFusion(player,-1);
+            drawIngredientInfo(input,false);
+            setBufferOwned(player,-1);
+            ACS_NamedExecuteWithResult("XW ENGINE CS",SYS_DRAW_BUFFER,input,false,true);
+        }
+        return true;
+    }
+    return false;
+}
+
+function int uncombineCheck(int player, int fusionList) {
+    if (state(STATE_IS_UNCOMBINING)) {
+        if (state(STATE_IS_COMBINING)) {
+            if ((getTable(player,0)==fusionList) | (getTable(player,1)==fusionList))
+                return true;
+        }
+        if (inputState(XW_ADD_KEY)) {
+            popWeaponFromTable(player,fusionList);
+            ACS_NamedExecuteWithResult("XW ENGINE", SYS_UNCOMBINE, player, fusionList);
+            stateOn(STATE_UNCOMBINED);
+            return true<<1;
+        }
+    }
+    return false;
+}
+
+// ----------------------------------------------------------------------------------------------------------------- //
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ----------------------------------------------------------------------------------------------------------------- //
+
+// Core
+
+script "XW ENGINE" (int type, int arg1, int arg2, int arg3) {
+    switch(type) {
+
+        /*
+            @arg1 chain
+        */
+        case SYS_POLYMERIZATION:
+            int player = PlayerNumber();
+            if ((fusionBufferSlot[player]<2) | (getBuffer(player,1,1) == -1))
+                terminate;
+            else if (isBufferOwned()) {
+                printTableMessage("ALREADY CREATED THIS FUSION");
+                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_SFX, SYS_SFX_DENIED);
+                terminate;                
+            }
+            else if (getQueueSize()==FUSION_QUEUE_SIZE) {
+                printTableMessage("FUSION QUEUE IS FULL");
+                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_SFX, SYS_SFX_DENIED);
+                terminate;
+            }
+            ///////////////////////////////////////////////
+            //              FUSION PROCESS               //
+            ///////////////////////////////////////////////
+            int wep1 = getTable(player,0), wep2 = getTable(player,1);
+            str wep1name = getXoverActor(wep1), wep2name = getXoverActor(wep2);            
+            stateOn(STATE_IS_COMBINING);
+            ACS_NamedExecuteWithResult("XW ENGINE CS",SYS_POLYMERIZATION_ANIM_1,wep1,wep2);
+            drawPolymerizationQueue(3);
+            for (int i=0; i<51; i++) {
+                delay(1);
+                if (stopFusion()) terminate;
+            }
+            arg2 = getBufferedFusion(player,1);
+
+            ////////////////// OPERATIONS
+            setTable(player,0,arg2);
+            // shift ingredients
+            for (int j = 1; j < TABLE_SIZE-1; j++)
+                setTable(player,j,getTable(player,j+1));
+            setTable(player,j,-1);
+            
+            for (j = 1; j < fusionBufferSlot[player]; j++) {
+                setBuffer(player,j,getBuffer(player,j+1,0),getBuffer(player,j+1,1));
+                setFusionSelect(player,j,getFusionSelect(player,j+1));
+            }
+            setBuffer(player,0,arg2,-1);
+            fusionBufferSlot[player]--;
+
+            ACS_NamedExecuteWithResult("XW ENGINE CS",SYS_POLYMERIZATION_ANIM_2,arg2,getTable(player,1),arg1);
+            pushFusionEvent(player,arg2,wep1,wep2);
+            GiveInventory(XW_DUMMYWEP,1);
+            stateOn(STATE_CRITICAL_SECTION);
+            drawPolymerizationQueue(0);
+            if (getBuffer(player,1,1)==-1)  stateOn(STATE_POLYMERIZATION_OVER); // no other fusion in table
+            else                            stateOff(STATE_POLYMERIZATION_OVER);
+
+            GiveInventory(XW_DUMMYWEP,1);
+            while (checkWeapon(wep1name) || checkWeapon(wep2name)) {
+                delay(1);
+                if (stopFusion()) 
+                    terminate;
+                setweapon(XW_DUMMYWEP);
+            }
+            TakeInventory(XW_DUMMYWEP,1);    
+            TakeInventory(wep1name,1);
+            TakeInventory(wep2name,1);
+            stateOff(STATE_CRITICAL_SECTION);
+
+            for (i = POLYMERIZATION_SPIN_WAIT; i>0; i-=2) { delay(2); if (stopFusion()) terminate; }
+            if (state(STATE_POLYMERIZATION_OVER))
+                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_QUEUE_ANIMATION, findLastQueued(), arg2);
+            for (i = POLYMERIZATION_SPIN_WAIT+7; i>0; i-=2) { delay(2); if (stopFusion()) terminate; }            
+            if (state(STATE_POLYMERIZATION_OVER)) {
+                pushFusionToQueue(arg2);
+                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_QUEUE, 0, false);
+            }           
+            for (i = POLYMERIZATION_SPIN_WAIT; i>0; i-=2) { delay(2); if (stopFusion()) terminate; }
+            if (state(STATE_POLYMERIZATION_OVER)) {
+                for (i = 4; i>0; i--) { delay(2); if (stopFusion()) terminate; }
+                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_TABLE, 2);
+                clearFusionTable(player);
+                stateOff(STATE_IS_COMBINING);
+                stateOff(STATE_POLYMERIZATION_OVER);
+            }
+            else   
+                ACS_NamedExecuteWithResult("XW ENGINE",SYS_POLYMERIZATION,arg1+1);    
+        break;
+
+        /*
+            @arg1 weapon name
+        */
+        case SYS_FORCE_SWITCH:
+            do {
+                SetWeapon(arg1);
+                if (!strcmp(getweapon(), arg1)) break;
+                delay(1);
+            } while (!isGone(0));
+        break;
+
+        /*
+            @arg1 player
+            @arg2 fusion id
+        */
+        case SYS_UNCOMBINE:        
+            arg3 = getFusionEventCount(arg1);              
+            for (j = 0; j < arg3; j++) { // findFusionEvent
+                type = getFusionEvent(arg1,j);
+                if (getFusionEventFusion(arg1,type)==arg2) {
+                    arg2 = getXoverActor(arg2);
+                    for (i = 0; i < 2; i++) {
+                        wep1 = getFusionEventIngredient(arg1,type,i);
+                        if (isFusion(wep1)) {
+                            GiveInventory(getXoverActor(wep1),1);
+                            enableFusionEvent(arg1,findFusionEvent(arg1,wep1));
+                        }
+                        else 
+                            restoreWeapon(wep1);
+                    }
+                    deleteFusionEvent(arg1,type);
+                    for (; j < (arg3-1); j++)
+                        moveFusionEvent(arg1,getFusionEvent(arg1,j+1),getFusionEvent(arg1,j));
+                    setFusionEventCount(arg1,arg3-1);
+                    wep1 = getXoverActor(wep1);
+                    break;
+                }
+            }
+            while (!StrICmp(getweapon(), arg2)) {
+                delay(1); if (isGone(0)) terminate;
+                setweapon(wep1);
+            }
+            TakeInventory(arg2,1);
+        break;
+
+        case SYS_BOT:
+            wep1 = -1, wep2 = -1;
+            wep1name = getWeapon(), wep2name = wep1name;
+            player = PlayerNumber();
+            while (true) {
+                i = random(5,21);
+                while (i) {
+                    delay(7);
+                    if (isGone(0)) terminate;
+                    i--;
+                }
+                wep2name = getWeapon();
+                if ((getQueueSize()<FUSION_QUEUE_SIZE) && (getFusionEventCount(player)<FUSION_EVENTS_MAX)) {
+                    if (StrICmp(wep2name,wep1name)) {
+                        wep2 = findXoverByActor(wep2name,false);
+                        if (isFusion(wep2)) {
+                            arg1 = getTier(wep2)+2; // wait longer before switching if using a xover weapon
+                            arg1  = (arg1<(XW_MAX_TIER+3) ? (arg1*arg1*arg1)>>1 : 0xFFFF);
+                            for (i = 0; i < arg1; i++) {
+                                delay(7); if (isGone(0)) terminate;
+                            }
+                        }
+                        type = botCombine(player,wep1,wep2);
+                        if (type != -1) {
+                            GiveInventory(XW_DUMMYWEP,1);
+                            do {
+                                setWeapon(XW_DUMMYWEP);
+                                if (!StrICmp(getweapon(),XW_DUMMYWEP)) break;
+                                else if (isGone(0)) terminate;
+                                delay(2);
+                            } while (true);
+                            clearInv(wep1name); clearInv(wep2name); clearInv(XW_DUMMYWEP);
+                            pushFusionToQueue(type);
+                            wep1name = -1; wep2name = -1;
+                            continue;
+                        }
+                        wep1 = wep2;
+                        wep1name = wep2name;
+                    }
+                }
+
+                // cycle bot weaponry
+                GiveInventory(XW_DUMMYWEP,1);
+                do {
+                    setweapon(XW_DUMMYWEP);
+                    if (!StrICmp(getweapon(),XW_DUMMYWEP)) break;
+                    else if (isGone(0)) terminate;
+                    delay(2);
+                } while (true);
+                clearInv(wep2name); clearInv(XW_DUMMYWEP); 
+                delay(1);
+                GiveInventory(wep2name,1);
+            }
+        break;
+
+        // Logic for weapon pickup collection
+        case SYS_WEP_PICKUP:
+            switch(arg1) {
+                case SYS_WEP_PICKUP_PLAYER_SET: 
+                    pickupPlayer = PlayerNumber(); 
+                break;
+                
+                case SYS_WEP_PICKUP_PLAYER_GET: 
+                    arg1 = UniqueTID();
+                    Thing_ChangeTID(0, arg1);
+                    SetActivatorToPlayer(pickupPlayer);
+                    ACS_NamedExecuteWithResult("core_setTIDsPointerToThis", arg1, AAPTR_TRACER);
+                    Thing_ChangeTID(arg1, 0);
+                break;
+
+                case SYS_WEP_PICKUP_CHECK:
+                    arg1 = UniqueTID();
+                    Thing_ChangeTID(0, arg1);	
+                    SetActivator(0, AAPTR_TARGET);
+                    wep1name = GetActorClass(0);
+                    type = CheckFlag(0, "DROPPED");
+                    SetActivator(arg1, AAPTR_TRACER);
+                    Thing_ChangeTID(arg1, 0);
+
+                    arg3 = false;
+                    if(CheckInventory(wep1name) && !type) {
+                        setresultvalue(false);
+                        terminate;
+                    }
+                    wep1 = findWeaponByActor(wep1name);
+                    if (wep1 != -1) {
+                        // Xover check
+                        player = PlayerNumber();
+                        if (isWeaponConsumed(player,wep1)) {
+                            if (!type) {
+                                setresultvalue(false);
+                                terminate;
+                            }
+                            else arg3 = true;
+                        }
+
+                        // Dropped weapon
+                        if (CheckInventory(wep1name) | arg3) {
+                            wep1 = getWeaponAmmoType(wep1);
+                            wep2 = getWeaponAmmo2Type(wep1);
+                            if((!StrICmp(wep1, "") || (StrICmp(wep1, "") && CheckInventory(wep1) >= GetAmmoCapacity(wep1))) 
+                                && (!StrICmp(wep2, "") || (StrICmp(wep2, "") && CheckInventory(wep2) >= GetAmmoCapacity(wep2)))) {
+                                SetResultValue(false);
+                                terminate;
+                            }
+                        }
+                    }
+                    setresultvalue(true);
+                    if (arg3) {
+                        delay(1);
+                        clearInv(wep1name);
+                    }
+                break;
+            }
+        break;
+
+        case SYS_PLAYER_THREAD:
+            player = PlayerNumber();
+            arg3 = isBot(), arg2 = 0;
+            while(ClassifyActor(0)&ACTOR_ALIVE) {
+                if (!arg3) {
+                    j = fusionBufferSlot[player];
+                    wep2name = getweapon();
+                    if (j) {
+                        if (StrICmp(wep1name,wep2name)) {
+                            wep2 = findXoverByActor(wep2name,false);
+                            type = (wep1 != wep2);
+                            wep1 = wep2;
+                            if (type) {
+                                arg1 = getBufferedFusion(player,-1);
+                                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_PREDICT, 
+                                    (arg1 != wep2) && (wep2 != -1) ? getFusions(arg1,wep2) : false);
+                                if (wep2 != -1) {
+                                    for (i = 0; i < j; i++) {
+                                        if (getTable(player,i)==wep2) break;    
+                                    }
+                                    if (i==j) arg1 = wep2;
+                                }
+                                drawIngredientInfo(arg1,false);
+                            }
+                        }
+                    }
+                    wep1name = wep2name;
+                }
+                if (autoUnlockRate > 0) {
+                    if (!(timer()%7)) {
+                        arg2 += autoUnlockRate/5;
+                        if (arg2 >= 1.0) {
+                            forgeFusion(arg2&0xFFFF0000,false,false);
+                            arg2 &= 0xFFFF;
+                        }
+                    }
+                }
+                delay(1);
+            }
+        break;
+    }
+}
+
+
+function void appendWeapon(void) {
+	int id = findXoverByActor(GetWeapon(),false);
+    if ((id == -1) | getTier(id)==(XW_MAX_TIER+1)) {
+        ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_SFX, SYS_SFX_DENIED);
+        printTableMessage("CAN'T USE THIS WEAPON");
+        return;
+    }
+    int player = PlayerNumber();
+    if (fusionBufferSlot[player]==TABLE_SIZE)   return;
+    else if (isBufferOwned())                   return;
+    else if (state(STATE_POLYMERIZATION_OVER))  return;
+    int buffered = getBufferedFusion(player,-1);
+    if (buffered>=0) { if (getTier(buffered)==(XW_MAX_TIER+1)) return; }
+
+    if (getFusionEventCount(player) >= (FUSION_EVENTS_MAX-XW_MAX_TIER-1)) {
+        ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_SFX, SYS_SFX_DENIED);
+        printTableMessage("FUSION LIMIT REACHED... UNCOMBINE SOME WEAPONS");
+        return;
+    }
+    if (fusionBufferSlot[player]) {
+        int fusion = getFusions(buffered,id);
+        if (!fusion) {
+            ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_SFX, SYS_SFX_DENIED);
+            return;
+        }
+    }
+	for (int slot = 0; slot < TABLE_SIZE; slot++) {
+		if (getTable(player,slot) == id) {
+			ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_WEAPON_ALREADY_IN, slot);
+			return;	
+		}
+		else if (getTable(player,slot) == -1) {
+            setTable(player,slot,id);
+            GiveInventory("XW Pop cooldown", 1);
+
+            if (!slot) { // first insertion of the table
+                drawIngredientInfo(id,false);
+                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_TABLE, 1, id);
+                setBuffer(player,-1,id,-1);
+                fusionBufferSlot[player]++;
+                fusion = -1;
+            }
+            else {
+                if (!state(STATE_IS_COMBINING))
+                    ACS_NamedExecuteWithResult("XW ENGINE CS",SYS_DRAW_INGREDIENT,id,slot);                
+                setBuffer(player,-1,id,buffered);
+                setFusionSelect(player,slot,0);
+                fusionBufferSlot[player]++;
+                fusion = getBufferedFusion(player,-1); // the one we just found
+                setBufferOwned(player,-1);
+                drawIngredientInfo(fusion,true);
+                if (state(STATE_IS_COMBINING))
+                    drawPolymerizationQueue(0);
+            }
+            ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_APPEND_WEAPON, fusion, hasSwaps(player));
+            break;
+        }
+    }
+}
+
+function void popWeapon(bool silent, bool refreshGUI) {
+    int player = PlayerNumber();
+    for (int slot = TABLE_SIZE-1; slot>=(0+(state(STATE_IS_COMBINING)<<1)); slot--) {
+        if (getTable(player,slot) != -1) {
+            setTable(player,slot,-1);
+            ACS_NamedExecuteWithResult("XW ENGINE CS",SYS_DRAW_INGREDIENT,-1,slot);
+            bool wasAFusion = getBuffer(player,slot,1) != -1;
+            if (!silent) {
+                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_SFX, 1);
+                if (wasAFusion) // fusion tier downgrade
+                    ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_SFX, 2);
+            }
+            int tier = getTier(getBufferedFusion(player,-1));
+            fusionBufferSlot[player]--;
+            deleteFusionBuffer(player, fusionBufferSlot[player]);
+
+            if (!fusionBufferSlot[player]) // close table
+                ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_TABLE, 2);
+            else {
+                int lastInserted = getBufferedFusion(player,-1);
+                if (refreshGUI) {
+                    drawIngredientInfo(lastInserted,false);
+                    ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_PREDICT, false);
+                    if (slot<2) {
+                        if(wasAFusion)
+                            ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_FLASH_TABLE, tier, 2, true);
+                    }
+                    else {
+                        ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_FLASH_TABLE, getTier(lastInserted), 2);
+                        ACS_NamedExecuteWithResult("XW ENGINE CS",SYS_DRAW_BUFFER,lastInserted,0,hasSwaps(player));
+                    }
+                }
+                setBufferOwned(player,false);
+            }
+            if (state(STATE_IS_COMBINING))
+                drawPolymerizationQueue(0);
+            break;
+        }
+    }
+}
+
+function void popWeaponFromTable(int player, int id) {    
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        if (getTable(player,i)==-1) return;
+        if (getTable(player,i)==id) {
+            i = fusionBufferSlot[player]-i;
+            for (int j = 0; j < i; j++)
+                popWeapon(true,j==(i-1));
+        }
+    }
+}
+
+function void pushFusionToQueue(int fusionId) {
+    for(int i = 0; i < FUSION_QUEUE_SIZE; i++)
+        if (!getQueuedForge(i)) { int slot = i; break; }
+    setQueuedFusion(slot,fusionId);
+    setQueuedForge(slot,calcForge(fusionId));
+    setQueueSize(getQueueSize()+1);
+}
+
+function bool stopFusion(void) {    
+    if (isGone(0)) {
+        stateOff(STATE_IS_COMBINING);
+        return true;
+    }
+    return false;
+}
+
+function void messageClient(int type, str string, int client) {
+    NamedSendNetworkString("XW String", strParam(d:type, s:string), client);
+}
+
+// give a weapon without altering ammo 
+function void restoreWeapon(int id) {
+    int ammo = getWeaponAmmoType(id);
+    int stored = CheckInventory(ammo);
+    GiveInventory(getXoverActor(id),1);
+    __SetInventory(ammo, stored);
+}
+
+function bool hasSwaps(int player) {
+    int slot = fusionBufferSlot[player]-1;
+    int ing2 = getBuffer(player,slot,1);
+    if (ing2!=-1) // valid fusion currently buffered
+        return get8bFlagVal(getFusions(ing2, getBuffer(player,slot,0)),1);
+    return false;
+}
+
+// The current last fusion of the chain
+function int getBufferedFusion(int player, int slot) {
+    if (slot==-1) slot = fusionBufferSlot[player]-1;
+    int ing1 = getBuffer(player,slot,0), ing2 = getBuffer(player,slot,1);
+    if (ing2 != -1) { // valid fusion in buffer
+        int fusionSelected = get8bFlagVal(getFusions(ing1,ing2), getFusionSelect(player,slot))-1;
+        int data = xoverToGlobalId(fusionSelected, getFusionTier(ing1,ing2));
+    }
+    else 
+        data = ing1;
+    return data;
+}
+
+function bool isBufferOwned(void) { return CheckInventory("XW Buffer Owned"); }
+function void setBufferOwned(int player, int val) { 
+    if (val == -1) 
+        val = findFusionEvent(player,getBufferedFusion(player,-1)) != -1;
+    __SetInventory("XW Buffer Owned", val);
+}
+
+function int botCombine(int player, int wep1, int wep2) {
+    if ((wep1==-1) | (wep2==-1))  
+        return -1;
+    int fusionList = getFusions(wep1,wep2);
+    if (fusionList) {
+        int pick = 0, fusionListCopy = fusionList;
+        while (true) {
+            fusionListCopy>>=8;
+            if (!fusionListCopy) break;
+            pick++;
+        }
+        pick = random(0,pick);
+        int fusion = xoverToGlobalId(get8bFlagVal(fusionList,pick)-1, getFusionTier(wep1,wep2));
+        if (findFusionEvent(player,fusion) == -1) {
+            pushFusionEvent(player, fusion, wep2, wep1);
+            return fusion;
+        }
+    }
+    return -1;
+}
+
+#DEFINE XW_SYSTEM_STATE "XW System State"
+function int state(int flag) { return getBit(CheckInventory(XW_SYSTEM_STATE),flag);  }
+function void stateOn(int flag) { __SetInventory(XW_SYSTEM_STATE, CheckInventory(XW_SYSTEM_STATE) | (1<<flag)); }
+function void stateOff(int flag) { __SetInventory(XW_SYSTEM_STATE, CheckInventory(XW_SYSTEM_STATE) & ~(1<<flag)); }
+#DEFINE XW_INPUT_STATE "XW Input State"
+function int inputState(int flag) { return getBit(CheckInventory(XW_INPUT_STATE),flag);  }
+function void inputStateOn(int flag) { __SetInventory(XW_INPUT_STATE, CheckInventory(XW_INPUT_STATE) | (1<<flag)); }
+function void inputStateOff(int flag) { __SetInventory(XW_INPUT_STATE, CheckInventory(XW_INPUT_STATE) & ~(1<<flag)); }
+
+
+
+
+// ----------------------------------------------------------------------------------------------------------------- //
+
+
+
+
+// ----------------------------------------------------------------------------------------------------------------- //
+
+// Ammo scripts
+
+script "XW Ammo" (void) {
+    while (timer()<2) delay(1);
+    int player = PlayerNumber();
+    str weapon = GetWeapon();
+    int id = findXoverByActor(weapon,true);
+    if (id==-1) {
+        //log(s:"\caWarning : tried to call 'XW Ammo' script on ", s:GetWeapon(), s:" which isn't defined as a Xover Weapon");
+        terminate;
+    }
+    setXoverAmmoCount(0);
+    setupXoverAmmo(player, id);
+    if(isBot()) terminate;
+    for (int i = 0; i < getXoverAmmoCount(); i++) {
+        str name = strparam(c:i+65, s:getWeaponActor(getXoverAmmo(i)));
+        messageClient(MSG_SETUP_BAR_COLOR, name, player);
+        messageClient(MSG_MESSAGE_AMMONAME, strParam(c:i+1, s:getWeaponAmmoType(getXoverAmmo(i))), player);
+    }
+    messageClient(MSG_AMMO_REFRESH,weapon,player);
+}
+
+script "XW Ammo Check" (int amount) { 
+    if (GetCvar("sv_infiniteammo") | isBot()) setResultValue(true);
+    else SetResultValue(xoverWeaponAmmo(amount,0,true)); 
+}
+
+script "XW Ammo Use" (int amount) { 
+    if (GetCvar("sv_infiniteammo")) terminate;
+    xoverWeaponAmmo(amount,0,false);
+    ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_AMMOS); 
+}
+
+// return false if targeted ammos are full
+script "XW Ammo Give" (int amount) { // TODO xover energy balancer support
+    int id = findXoverByActor(GetWeapon(),true);
+    int player = PlayerNumber();
+    if (amount==-1) { // MTank special case
+        for(int i = 0; i < MAX_WEAPONS_GLOBAL; i++) {
+            int tmp = CheckInventory(getWeaponActor(i));
+            if (!tmp) tmp = isWeaponConsumed(player,i);
+            if (tmp) {
+                GiveInventory(getWeaponAmmoType(i), GetAmmoCapacity(getWeaponAmmoType(i)));
+                if(StrICmp(getWeaponAmmo2Type(i),""))
+                    GiveInventory(getWeaponAmmo2Type(i), GetAmmoCapacity(getWeaponAmmo2Type(i)));
+            }
+        }
+        if (id!=-1) ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_AMMOS); 
+        terminate;
+    }  
+    if (id==-1) 
+        tmp = ACS_NamedExecuteWithResult("core_AmmoScript", amount/10);
+    else {
+        tmp = xoverWeaponAmmo(amount,1,true);
+        if (tmp) {
+            xoverWeaponAmmo(amount,1,false);
+            ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_AMMOS); 
+        }
+        else if (CheckInventory("EnergyBalancerActive")) 
+            tmp = ACS_NamedExecuteWithResult("core_AmmoScript", amount/10);
+    }
+    SetResultValue(tmp);
+}
+
+function void setupXoverAmmo(int player, int fusion) {
+    if (!isFusion(fusion)) {
+        int n = getXoverAmmoCount();
+        setXoverAmmo(n,fusion);
+        setXoverAmmoCount(n+1);
+        return;
+    }
+    for (int i = 0; i < getFusionEventCount(player); i++) {
+        int e = getFusionEvent(player,i);
+        if (getFusionEventFusion(player,e)==fusion) {
+            setupXoverAmmo(player,getFusionEventIngredient(player,e,0));
+            setupXoverAmmo(player,getFusionEventIngredient(player,e,1));
+            return;
+        }
+    }
+    log(s:"\cg[setupXoverAmmo] Couldn't find fusion ingredients for ", d:fusion, s:" !!!");
+}
+/*
+    do a ammo modification of currently equipped xover weapon's ingredients
+    @base amount in per mille
+    @give give instead of take?
+    @check to only check if state valid to give/take from
+*/
+function bool xoverWeaponAmmo(int base, bool give, bool checkOnly) {
+    int player = PlayerNumber();
+    int count = max(2,getXoverAmmoCount());
+    base = (base<<16)/count;
+    for (int i = 0; i < count; i++) {
+        bool ammoState = ammoUpdate(player,getXoverAmmo(i),base,give,checkOnly);
+        if (checkOnly && (give==ammoState)) return give;
+    }
+    return !give;
+}
+
+/*
+    @player number
+    @id weapon id (ingredient)
+    @base in per 1000 and <<16
+    @give give instead of take?
+    @checkOnly only check if can be taken/given?
+*/
+function bool ammoUpdate(int player, int id, int base, bool give, bool checkOnly) {
+    str ammoName = getWeaponAmmoType(id);
+    if (checkOnly && give) // [give, checkOnly]
+        return (CheckInventory(ammoName)<GetAmmoCapacity(ammoName));
+    else {
+        int calc = decimalCalc(FixedMul((base/1000)*GetAmmoCapacity(ammoName),getWeaponAmmoFactor(id)), 
+                                getAmmoDecimal(player,id), give);
+        if (checkOnly) // [take, checkOnly]
+            return (CheckInventory(ammoName)>=(calc>>16));
+        else {
+            if (give) { // [give, !checkOnly]
+                GiveInventory(ammoName,(calc>>16));
+                if (CheckInventory(ammoName)==GetAmmoCapacity(ammoName)) {
+                    setAmmoDecimal(player,id,0);
+                    return true;
+                }
+            }
+            else // [take, !checkOnly]
+                TakeInventory(ammoName,(calc>>16));
+            setAmmoDecimal(player,id,calc&0xFFFF);
+        }
+    }
+    return true;
+}
+
+#DEFINE UNLOCK_AMMO 225
+script "XW Unlock Ammo" (int ammoSize, int fusion) {  
+    int ammos[16];
+    for (int i = 0; i < ammoSize; i++) ammos[i] = tmpData[i];
+    delay(20);
+    int tier = getTier(fusion);
+    int amount = ((UNLOCK_AMMO*tier) + (tier==2 ? 0 : (UNLOCK_AMMO*((1<<(tier-1))-tier))>>2))<<12; // 25% per average bar
+    PlaySound(0,"XWNRGUP",CHAN_ITEM);
+    int player = PlayerNumber();
+    for (i = 0; i < 16; i++) {
+        int lowest = 2.0, lowestId = 0;
+        for (int j = 0; j < ammoSize; j++) {
+            str ammoName = getWeaponAmmoType(ammos[j]);
+            int ratio = FixedDiv(CheckInventory(ammoName)<<16, GetAmmoCapacity(ammoName)<<16);
+            if (ratio < lowest) {
+                lowestId = j;
+                lowest = ratio;
+            }                    
+        }
+        ammoName = getWeaponAmmoType(ammos[lowestId]);
+        ammoUpdate(player,ammos[lowestId], amount, 1, false);
+        if (!strcmp(getweapon(),getXoverActor(fusion)))
+            ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_DRAW_AMMOS); 
+        delay(2);
+    }
+}
+
+// ----------------------------------------------------------------------------------------------------------------- //
+
+
+
+
+
+
+// ----------------------------------------------------------------------------------------------------------------- //
+
+// 115~~120% / 30-40
+// 137.5~150% / 75 -85
+// 171.25~195% / 140-140
+// 221.875~262% / 240-210
+function int calcForge(int fusionId) {
+    switch(getTier(fusionId)) {
+        case 2: return 60.0;
+        case 3: return 120.0;
+        case 4: return 180.0;
+        case 5: return 240.0;
+    }
+    // forge = min(forge,0x7FFFFFFF);
+    return 60.0;
+}
+
+function void forgeFusionCheck(int damage, int victim) {
+    int hp = GetActorProperty(0,APROP_Health);  
+    if (victim&ACTOR_MONSTER)       damage = unlockMonsterRate*min(damage,hp); //  && CheckFlag(0,"COUNTKILL")
+    else if (victim&ACTOR_PLAYER)   damage = unlockPlayerRate*min(damage,hp);
+    else damage = 0;
+
+    if (!damage) return;
+    victim = ActivatorTID();   
+    SetActivator(0, AAPTR_DAMAGE_SOURCE);     
+    int source = ClassifyActor(0);
+    if ((source&ACTOR_PLAYER) && (source&ACTOR_ALIVE)) {
+        source = ActivatorTID();
+        if (source!=victim) // ignore self damage
+            forgeFusion(damage,false,true);
+    }
+}
+
+function void forgeFusion(int forge, int chain, bool flashBar) {
+    int stored = getQueuedForge(0);
+    if (!(forge&&stored)) {
+        fusionForgeEnd(chain,false,flashBar);
+        return;
+    }
+    if (forge<stored) {
+        setQueuedForge(0,stored-forge);
+        fusionForgeEnd(chain,true,flashBar);
+        return;
+    }  
+    else { // unlock fusion
+        GiveInventory("XW Queue Animation",1);
+        forge -= stored;
+        int fusion = getQueuedFusion(0);
+        int player = PlayerNumber();
+        str fusionName = getXoverActor(fusion);
+        GiveInventory(fusionName, 1);
+        messageClient(MSG_GET_EQUIPPED_MSG, strparam(d:getXoverSlot(fusion), s:getXoverTag(fusion)), player);        
+        unlockFusionChain(player,fusion,true);
+
+        ACS_NamedExecuteWithResult("XW Unlock Ammo", findBaseIngredients(player,fusion,0), fusion);
+
+        for (int i = 0; i < FUSION_QUEUE_SIZE-1; i++) {
+            setQueuedFusion(i,getQueuedFusion(i+1));
+            setQueuedForge(i,getQueuedForge(i+1));
+        }
+        deleteQueued(i);
+        setQueueSize(getQueueSize()-1);
+        
+        int higherTier = (chain ? getTier(chain) : 1);
+        higherTier = (getTier(fusion) > higherTier ? fusion : chain);
+        forgeFusion(forge,higherTier,flashBar);
+        return;
+    }
+}
+
+function void unlockFusionChain(int player, int fusion, int isRoot) {
+    if (!isFusion(fusion))
+        return;
+    int e = findFusionEvent(player,fusion);
+    if (isRoot) enableFusionEvent(player,e);
+    else        disableFusionEvent(player,e);        
+    unlockFusionEvent(player,e);
+    unlockFusionChain(player,getFusionEventIngredient(player,e,0),false);
+    unlockFusionChain(player,getFusionEventIngredient(player,e,1),false);
+}
+
+function void fusionForgeEnd(int fusion, bool forged, bool flashBar) {
+    if (fusion | forged)
+        drawFusionQueue(0,flashBar);
+    if (fusion) {
+        PlaySound(0,"XWQUUNLK",CHAN_7);
+        ACS_NamedExecuteWithResult("XW ENGINE CS", SYS_GET_EQUIPPED, fusion, (getTable(PlayerNumber(),0)==-1 ? TABLE_COLLAPSED_OFFSET : 0));
+        if (isBot())
+            ACS_NamedExecuteWithResult("XW ENGINE", SYS_FORCE_SWITCH, getXoverActor(fusion));
+    }
+}
+
+// ----------------------------------------------------------------------------------------------------------------- //

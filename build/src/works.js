@@ -34,7 +34,7 @@ export var module = {
             var mugshot = document.querySelector(id + ".mugshot > img");
             if (i == -1 && selected != -1)
                 i = selected;
-            mugshot.src = "".concat(res + 'mug' + (i + 1) + '.gif');
+            mugshot.src = "".concat(res + 'mugshot' + (i + 1) + '.gif');
         }
         function unfold(j) {
             if (selected != -1) {
@@ -72,37 +72,37 @@ var WorkLink = /** @class */ (function () {
     return WorkLink;
 }());
 var worksLinks = [
-    // A bout de bras
-    new WorkLink(WorkIcon.BUILD, "Production time:<br>2 months", "bur00Build"),
-    new WorkLink(undefined, "Textures' base tileset and music from external works", "bur00Credit"),
-    new WorkLink(WorkIcon.VIDEO, "View", "bur00Video"),
     // XW
-    new WorkLink(WorkIcon.BUILD, "Production time:<br>v1 - a few weeks<br>v2 - 6 months", "xoverBuild"),
-    new WorkLink(undefined, "Sound samples and certain sprites' base from external works", "xoverCredit"),
-    new WorkLink(WorkIcon.CODE, "Code sample", "xoverCode"),
+    new WorkLink(WorkIcon.BUILD, "Production:<br>6 months", "xoverBuild"),
+    new WorkLink(undefined, "Base sprites and sound effects from external games", "xoverCredit"),
+    new WorkLink(WorkIcon.CODE, "Code example", "xoverCode"),
     new WorkLink(WorkIcon.THREAD, "Forum thread", "xoverThread"),
-    new WorkLink(WorkIcon.VIDEO, "Gameplay (v1)", "xoverVideo"),
+    new WorkLink(WorkIcon.VIDEO, "Latest trailer", "xoverVideo"),
+    // A bout de bras
+    new WorkLink(WorkIcon.BUILD, "Production:<br>2 months", "bur00Build"),
+    new WorkLink(undefined, "Textures made from various tilesets, music from external source", "bur00Credit"),
+    new WorkLink(WorkIcon.VIDEO, "View", "bur00Video"),
     // Casinopolis
-    new WorkLink(WorkIcon.BUILD, "Production time:<br>One week", "casinopolisBuild"),
+    new WorkLink(WorkIcon.BUILD, "Production:<br>One week", "casinopolisBuild"),
     new WorkLink(undefined, "Uses Bumper Engine.<br>Textures upscaled from the original Sonic game with an externally trained ESRGAN neural network", "casinopolisCredit"),
     new WorkLink(WorkIcon.VIDEO, "View", "casinopolisVideo"),
     // Blacksmith
-    new WorkLink(WorkIcon.BUILD, "Production time:<br>One week", "blacksmithBuild"),
-    new WorkLink(undefined, "All graphic/sounds are from external works", "blacksmithCredit"),
+    new WorkLink(WorkIcon.BUILD, "Production:<br>One week", "blacksmithBuild"),
+    new WorkLink(undefined, "Graphic/sounds from external works", "blacksmithCredit"),
     new WorkLink(WorkIcon.DOWNLOAD, "Windows version", "blacksmithDownload"),
     // Seascape
-    new WorkLink(WorkIcon.BUILD, "Production time:<br>One month", "seascapeBuild"),
-    new WorkLink(undefined, "Made with two other devs. Textures, models and audio from external works", "seascapeCredit"),
+    new WorkLink(WorkIcon.BUILD, "Production:<br>One month", "seascapeBuild"),
+    new WorkLink(undefined, "Made with two other devs. Textures/models/audio from external works", "seascapeCredit"),
     new WorkLink(WorkIcon.GIT, "Source code", "seascapeCode"),
     new WorkLink(undefined, "Play", "seascapePlay"),
     // Voxel
-    // new WorkLink(WorkIcon.BUILD, "Production time:<br>A few days", "voxelBuild"),
+    // new WorkLink(WorkIcon.BUILD, "Production:<br>A few days", "voxelBuild"),
     // new WorkLink(undefined, "opengl-tutorial.org for the guides", "voxelCredit"),
     // new WorkLink(WorkIcon.DOWNLOAD, "Source code", "voxelCode"),
     // SRB2
-    new WorkLink(WorkIcon.BUILD, "Production time:<br>A few day/weeks, per map", "srb2Build"),
+    new WorkLink(WorkIcon.BUILD, "Production:<br>A few day/weeks, per map", "srb2Build"),
     new WorkLink(undefined, "-", undefined),
-    new WorkLink(WorkIcon.VIDEO, "View 'Dangerous Volcano Zone'", "srb2Volcano"),
-    new WorkLink(WorkIcon.VIDEO, "View 'Lost Feelings Island'", "srb2Island"),
-    new WorkLink(WorkIcon.VIDEO, "View 'Golden Palace Zone'", "srb2Palace")
+    new WorkLink(WorkIcon.VIDEO, "'Dangerous Volcano Zone'", "srb2Volcano"),
+    new WorkLink(WorkIcon.VIDEO, "'Lost Feelings Island'", "srb2Island"),
+    new WorkLink(WorkIcon.VIDEO, "'Golden Palace Zone'", "srb2Palace")
 ];
