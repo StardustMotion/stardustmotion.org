@@ -20,9 +20,9 @@ const frDict: i18nDict = {
         workUnity: `<a target="_blank" href="https://unity.com/fr">Unity</a>`,
         workCredits: "Crédits",
 
-        xoverDate: "2024",
-        xoverDesc: `Modification pour <a target="_blank" href="https://mm8bdm.net/">Mega Man 8-bit Deathmatch</a> qui ajoute un système de fusion d'armes<br><br>Les armes fusionées sont plus puissantes et définies par le mode de fonctionnement et élément de leurs ingrédients. L'arme fusionée est aussi elle même un ingrédient. <br><br><b>Plus de 50 armes sont implémentées</b<`,
-        xoverBuild: "Production: 6 mois",
+        xoverDate: "2025",
+        xoverDesc: `Modification pour <a target="_blank" href="https://mm8bdm.net/">Mega Man 8-bit Deathmatch</a> qui ajoute un système de fusion d'armes<br><br>Les armes fusionées sont plus puissantes et définies par le mode de fonctionnement et élément de leurs ingrédients. L'arme fusionée est aussi elle même un ingrédient. <br><br><b>Plus de 60 armes sont implémentées</b<`,
+        xoverBuild: "Production: 9 mois",
         xoverCredit: "Effets sonores et base de certains sprites issus d'autres jeux",
         xoverCode: "Example de code",
         xoverThread: "Sujet forum",

@@ -73,7 +73,7 @@ var WorkLink = /** @class */ (function () {
 }());
 var worksLinks = [
     // XW
-    new WorkLink(WorkIcon.BUILD, "Production:<br>6 months", "xoverBuild"),
+    new WorkLink(WorkIcon.BUILD, "Production:<br>9 months", "xoverBuild"),
     new WorkLink(undefined, "Base sprites and sound effects from external games", "xoverCredit"),
     new WorkLink(WorkIcon.CODE, "Code example", "xoverCode"),
     new WorkLink(WorkIcon.THREAD, "Forum thread", "xoverThread"),

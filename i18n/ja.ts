@@ -20,9 +20,9 @@ const jpDict: i18nDict = {
         workUnity: `<a target="_blank" href="https://unity.com/ja">Unity</a>`,
         workCredits: "謝意",
 
-        xoverDate: "2024",
-        xoverDesc: `特殊武器を交える可能性を追加 <a target="_blank" href="https://mm8bdm.net/">「メガマン：8ビット・デスマッチ」</a>のＭＯＤです<br><br>交えた武器の方は強くなる、そして材料の元素と種類しだいで影響します。交えた武器も材料としてコンボ使えます。<br><br><b>新武器50以上実装です</b>`,
-        xoverBuild: "期間:6ヶ月",
+        xoverDate: "2025",
+        xoverDesc: `特殊武器を交える可能性を追加 <a target="_blank" href="https://mm8bdm.net/">「メガマン：8ビット・デスマッチ」</a>のＭＯＤです<br><br>交えた武器の方は強くなる、そして材料の元素と種類しだいで影響します。交えた武器も材料としてコンボ使えます。<br><br><b>新武器60以上実装です</b>`,
+        xoverBuild: "期間:9ヶ月",
         xoverCredit: "ＳＦＸサンプルと複数スプライトの由来は外部ソースです",
         xoverCode: "試料のコード",
         xoverThread: "スレードへ",
