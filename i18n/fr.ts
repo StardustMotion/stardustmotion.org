@@ -8,7 +8,7 @@ const frDict: i18nDict = {
         contact: "contact"
     },
     home: {
-        intro: "Part d'informations publiques/professionnelles de Stardust Motion<br><br>qui ne nécessite probablement pas plus d'explications"
+        intro: "Informations publiques/professionnelles de Stardust Motion<br><br>ー Ne nécessite probablement pas plus d'explications ー"
     },
     works: {
         workDate: "Date",
@@ -19,6 +19,13 @@ const frDict: i18nDict = {
         workTypeVR: "Vidéo VR",
         workUnity: `<a target="_blank" href="https://unity.com/fr">Unity</a>`,
         workCredits: "Crédits",
+
+        tawawaTitle: "Développement Unity",
+        tawawaDate: "2026",
+        tawawaBuild: "Production: 5 mois (éditeur de personnage)",
+        tawawaCredit: "Studio: Tawawa Delivery",
+        tawawaThread: "Page Steam (18+)",
+        tawawaDesc: `Contribué au jeu video \"ISExKAI MAIDEN～Osawari H as you like in another world～\"<br> en tant que programmeur.<br><br> Aussi, developpé un outil interne de personnalisation de modèles 3D pour les futurs jeux, utilisant le moteur <a target="_blank" href="https://assetstore.unity.com/packages/3d/characters/uma-2-35611" >UMA</a>.`,
 
         xoverDate: "2025",
         xoverDesc: `Modification pour <a target="_blank" href="https://mm8bdm.net/">Mega Man 8-bit Deathmatch</a> qui ajoute un système de fusion d'armes<br><br>Les armes fusionées sont plus puissantes et définies par le mode de fonctionnement et élément de leurs ingrédients. L'arme fusionée est aussi elle même un ingrédient. <br><br><b>Plus de 60 armes sont implémentées</b<`,

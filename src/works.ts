@@ -5,6 +5,7 @@ import { tableSort } from './utils.js'
 export var module = {
     run: function () {
         const works: NodeList = document.querySelectorAll(id + ".works tr:not(:first-child)");
+        console.log(works.length);
         const details: HTMLCollection|undefined = document.querySelector(id + ".details")?.children;
         for (let i = 0; i < works.length; i++) {
             works[i].addEventListener("mouseover", () => mugshotUpdate(i));
@@ -69,12 +70,17 @@ class WorkLink {
 }
 
 const worksLinks: WorkLink[] = [
+    // たわわデリバリ
+    new WorkLink(WorkIcon.BUILD, "Production:<br>~5 months (Character Editor)", "tawawaBuild"),
+    new WorkLink(undefined, "Company: Tawawa Delivery", "tawawaCredit"),
+    new WorkLink(WorkIcon.THREAD, "Steam page (NSFW)", "tawawaThread"),
+
     // XW
     new WorkLink(WorkIcon.BUILD, "Production:<br>9 months", "xoverBuild"),
     new WorkLink(undefined, "Base sprites and sound effects from external games", "xoverCredit"),
     new WorkLink(WorkIcon.CODE, "Code example", "xoverCode"),
     new WorkLink(WorkIcon.THREAD, "Forum thread", "xoverThread"),
-    new WorkLink(WorkIcon.VIDEO, "Latest trailer", "xoverVideo"),
+    new WorkLink(WorkIcon.VIDEO, "Public release", "xoverVideo"),
 
     // A bout de bras
     new WorkLink(WorkIcon.BUILD, "Production:<br>2 months", "bur00Build"),

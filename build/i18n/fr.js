@@ -6,7 +6,7 @@ var frDict = {
         contact: "contact"
     },
     home: {
-        intro: "Part d'informations publiques/professionnelles de Stardust Motion<br><br>qui ne nécessite probablement pas plus d'explications"
+        intro: "Informations publiques/professionnelles de Stardust Motion<br><br>ー Ne nécessite probablement pas plus d'explications ー"
     },
     works: {
         workDate: "Date",
@@ -17,6 +17,12 @@ var frDict = {
         workTypeVR: "Vidéo VR",
         workUnity: "<a target=\"_blank\" href=\"https://unity.com/fr\">Unity</a>",
         workCredits: "Crédits",
+        tawawaTitle: "Développement Unity",
+        tawawaDate: "2026",
+        tawawaBuild: "Production: 5 mois (éditeur de personnage)",
+        tawawaCredit: "Studio: Tawawa Delivery",
+        tawawaThread: "Page Steam (18+)",
+        tawawaDesc: "Contribu\u00E9 au jeu video \"ISExKAI MAIDEN\uFF5EOsawari H as you like in another world\uFF5E\"<br> en tant que programmeur.<br><br> Aussi, developp\u00E9 un outil interne de personnalisation de mod\u00E8les 3D pour les futurs jeux, utilisant le moteur <a target=\"_blank\" href=\"https://assetstore.unity.com/packages/3d/characters/uma-2-35611\" >UMA</a>.",
         xoverDate: "2025",
         xoverDesc: "Modification pour <a target=\"_blank\" href=\"https://mm8bdm.net/\">Mega Man 8-bit Deathmatch</a> qui ajoute un syst\u00E8me de fusion d'armes<br><br>Les armes fusion\u00E9es sont plus puissantes et d\u00E9finies par le mode de fonctionnement et \u00E9l\u00E9ment de leurs ingr\u00E9dients. L'arme fusion\u00E9e est aussi elle m\u00EAme un ingr\u00E9dient. <br><br><b>Plus de 60 armes sont impl\u00E9ment\u00E9es</b<",
         xoverBuild: "Production: 9 mois",

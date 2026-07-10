@@ -8,7 +8,7 @@ const jpDict: i18nDict = {
         contact: "お問い合わせ"
     },
     home: {
-        intro: "説明不要べきＳｔａｒｄｕｓｔ　Ｍｏｔｉｏｎ<br><br>の職業的ー公開情報のシェアー"
+        intro: "StardustMotionが公開・専門情報で占める割合/HP。<br><br>おそらくこれ以上の説明は不要でしょう"
     },
     works: {
         workDate: "年",
@@ -20,18 +20,25 @@ const jpDict: i18nDict = {
         workUnity: `<a target="_blank" href="https://unity.com/ja">Unity</a>`,
         workCredits: "謝意",
 
+        tawawaTitle: "Unity開発",
+        tawawaDate: "2026",
+        tawawaBuild: "期間：5っ月（アバターエディター）",
+        tawawaCredit: "サークル: たわわデリバリ",
+        tawawaThread: "Steamページへ （18歳）",
+        tawawaDesc: `プログラマーとしてゲーム「偽世界樹の巫女～街中おさわり放題」の開発に貢献。<br><br> また、<a target="_blank" href="https://assetstore.unity.com/packages/3d/characters/uma-2-35611" >UMA アセット</a>をエンジンとして使用し、今後のゲーム制作に向けて3Dモデルアバターエディターの社内ツールの開発。`,
+
         xoverDate: "2025",
-        xoverDesc: `特殊武器を交える可能性を追加 <a target="_blank" href="https://mm8bdm.net/">「メガマン：8ビット・デスマッチ」</a>のＭＯＤです<br><br>交えた武器の方は強くなる、そして材料の元素と種類しだいで影響します。交えた武器も材料としてコンボ使えます。<br><br><b>新武器60以上実装です</b>`,
+        xoverDesc: `<a target="_blank" href="https://mm8bdm.net/">「Mega Man 8-Bit Deathmatch」</a>用の、武器を合成する制度を追加するmodです。<br><br>合成されたの武器はより強力なり、素材の特性によって（例えば属性や射撃の方法）といった決定されます。合成武器をさらに武器を作るための素材として使うことも可能です。<br><br>60種類以上のkん前新規武器を実装がされています`,
         xoverBuild: "期間:9ヶ月",
         xoverCredit: "ＳＦＸサンプルと複数スプライトの由来は外部ソースです",
         xoverCode: "試料のコード",
         xoverThread: "スレードへ",
-        xoverVideo: "解放",
+        xoverVideo: "公式リリーズ",
 
         bur00Desc: `<a target="_blank" href="https://mm8bdm.net/forum/thread/cutstuff-mapping-jam-9-banana-jamma-60">マップジャム</a>の応募、<a target="_blank" href="https://mm8bdm.net/">「メガマン：8ビット・デスマッチ」</a>のプレイヤーｖｓ全員ステージです<br><br>甲板やエンジンルームや宙吊りエリア込みの大船です。<br><br>たまにはシップがプレイヤーの運動性を影響するの乱流に入ります<br>`,
         bur00Build: "期間:<br>2ヶ月",
-        bur00Credit: "ＢＧＭとテクスチャの基本素材(タイルセット)の由来は外部ソースです",
-        bur00Video: "ビデオ",
+        bur00Credit: "BGMとテクスチャの基本素材(タイルセット)の由来は外部ソースです",
+        bur00Video: "動画",
 
         casinopolisTitle: "カジノポリス",
         casinopolisDesc: `<a target="_blank" href="https://www.youtube.com/watch?v=9hvXSUwWwiY">ソニックのステージ</a>参考したVR動画です<br><br>三人称視点カメラです。エンジンおかげで2つ側面、同じ点を眺めるの観点は深さの感じを映します.<br><br>適当な体験のため<a target="_blank" href="https://arvr.google.com/intl/ja_jp/cardboard/">特殊の仕掛け</a>は必須です<br>`,
