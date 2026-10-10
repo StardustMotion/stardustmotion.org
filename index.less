@@ -10,11 +10,11 @@
 // Interactive elements
 @starlight: {
     color: black;
-    filter: invert(52%) sepia(40%) saturate(1423%) hue-rotate(177deg) brightness(91%) contrast(87%);
+    filter: invert(52%) sepia(40%) saturate(1423%) hue-rotate(137deg) brightness(101%) contrast(87%);
     transition: 0.16s;
     &:hover {
         transition: 0.08s;
-        filter: invert(89%) sepia(31%) saturate(5339%) hue-rotate(180deg) brightness(109%) contrast(127%);
+        filter: invert(89%) sepia(31%) saturate(5339%) hue-rotate(34deg) brightness(179%) contrast(127%);
     }
 }
 .starlight {
@@ -29,11 +29,13 @@ body {
     @starmo-text();
     text-align: center;
     background-color: rgb(0, 0, 0);
-    background-image: url("@{_res}/bg1.gif"), url("@{_res}/bg2.png");
-    background-repeat: repeat-x, repeat-x;
+    background-image: url("@{_res}/bg.gif");
+    background-size: auto 100vh;
+    background-repeat: repeat-x;
+    background-position: 0 0;
+    animation: parallaxScroll 1m linear infinite;
     background-position: center bottom, center top;
     background-attachment: fixed;
-    background-size: 100% auto;
     image-rendering: pixelated;
 
     main {
@@ -153,6 +155,7 @@ body {
     &.big {
         width: 256px;
     }
+    min-width:128px;
 }
 
 *:hover > .starmo-tooltip{

@@ -70,17 +70,27 @@ class WorkLink {
 }
 
 const worksLinks: WorkLink[] = [
-    // たわわデリバリ
-    new WorkLink(WorkIcon.BUILD, "Production:<br>~5 months (Character Editor)", "tawawaBuild"),
-    new WorkLink(undefined, "Company: Tawawa Delivery", "tawawaCredit"),
-    new WorkLink(WorkIcon.THREAD, "Steam page (NSFW)", "tawawaThread"),
+    // MRB2
+    //new WorkLink(WorkIcon.BUILD, "Production:<br>???", "mrb2Build"),
+
+    // MegaUI
+    new WorkLink(WorkIcon.BUILD, "Production:<br>2 weeks", "megaUiBuild"),
+    new WorkLink(undefined, "See repository", "megaUiCredits"),
+    new WorkLink(WorkIcon.THREAD, "Repository", "workRepository"),
+    new WorkLink(WorkIcon.VIDEO, "Release video", "workReleaseVideo"),
+
+    // 同人
+    new WorkLink(WorkIcon.BUILD, "Production:<br>~since 2025", "doujinBuild"),
+    new WorkLink(undefined, "Circle: Tawawa Delivery", "doujinCredit"),
+    new WorkLink(WorkIcon.THREAD, "ISExKAI MAIDEN (NSFW)", "doujinIsekaiMaiden"),
+    new WorkLink(WorkIcon.THREAD, "Gal Survival (NSFW)", "doujinGalSurvival"),
 
     // XW
     new WorkLink(WorkIcon.BUILD, "Production:<br>9 months", "xoverBuild"),
     new WorkLink(undefined, "Base sprites and sound effects from external games", "xoverCredit"),
     new WorkLink(WorkIcon.CODE, "Code example", "xoverCode"),
     new WorkLink(WorkIcon.THREAD, "Forum thread", "xoverThread"),
-    new WorkLink(WorkIcon.VIDEO, "Public release", "xoverVideo"),
+    new WorkLink(WorkIcon.VIDEO, "Release video", "workReleaseVideo"),
 
     // A bout de bras
     new WorkLink(WorkIcon.BUILD, "Production:<br>2 months", "bur00Build"),
@@ -102,11 +112,6 @@ const worksLinks: WorkLink[] = [
     new WorkLink(undefined, "Made with two other devs. Textures/models/audio from external works", "seascapeCredit"),
     new WorkLink(WorkIcon.GIT, "Source code", "seascapeCode"),
     new WorkLink(undefined, "Play", "seascapePlay"),
-
-    // Voxel
-    // new WorkLink(WorkIcon.BUILD, "Production:<br>A few days", "voxelBuild"),
-    // new WorkLink(undefined, "opengl-tutorial.org for the guides", "voxelCredit"),
-    // new WorkLink(WorkIcon.DOWNLOAD, "Source code", "voxelCode"),
 
     // SRB2
     new WorkLink(WorkIcon.BUILD, "Production:<br>A few day/weeks, per map", "srb2Build"),
